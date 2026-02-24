@@ -16,6 +16,8 @@ import SavingsGoalsPage from "@/pages/savings-goals";
 import WhatIfPage from "@/pages/what-if";
 import HistoryPage from "@/pages/history";
 import ManageTagsPage from "@/pages/manage-tags";
+import FavoritesPage from "@/pages/favorites";
+import NetWorthPage from "@/pages/net-worth";
 import CategoriesSection from "@/pages/categories";
 import { Wallet, Layers } from "lucide-react";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -94,13 +96,25 @@ function TagsView() {
   return <ManageTagsPage />;
 }
 
+function FavoritesView() {
+  useDocumentTitle("Favorites | Fudget");
+  return <FavoritesPage />;
+}
+
+function NetWorthView() {
+  useDocumentTitle("Net Worth | Fudget");
+  return <NetWorthPage />;
+}
+
 function getPageTitle(location: string): string {
   if (location === "/reports") return "Reports";
   if (location === "/annual") return "Annual Overview";
   if (location === "/goals") return "Savings Goals";
+  if (location === "/networth") return "Net Worth";
   if (location === "/whatif") return "What If";
   if (location === "/history") return "History";
   if (location === "/tags") return "Manage Tags";
+  if (location === "/favorites") return "Favorites";
   if (location.startsWith("/budget/")) return "Budget";
   return "Dashboard";
 }
@@ -124,9 +138,11 @@ function AppContent() {
     if (location === "/reports") return "reports";
     if (location === "/annual") return "annual";
     if (location === "/goals") return "goals";
+    if (location === "/networth") return "networth";
     if (location === "/whatif") return "whatif";
     if (location === "/history") return "history";
     if (location === "/tags") return "tags";
+    if (location === "/favorites") return "favorites";
     if (location.startsWith("/budget/")) return "budget";
     return "home";
   })();
@@ -176,9 +192,11 @@ function AppContent() {
               <Route path="/reports" component={ReportsView} />
               <Route path="/annual" component={AnnualView} />
               <Route path="/goals" component={GoalsView} />
+              <Route path="/networth" component={NetWorthView} />
               <Route path="/whatif" component={WhatIfView} />
               <Route path="/history" component={HistoryView} />
               <Route path="/tags" component={TagsView} />
+              <Route path="/favorites" component={FavoritesView} />
               <Route component={DashboardView} />
             </Switch>
           </main>

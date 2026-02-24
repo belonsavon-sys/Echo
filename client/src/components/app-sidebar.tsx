@@ -25,9 +25,10 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/component
 import { useTheme } from "@/components/theme-provider";
 import {
   Wallet, Plus, BarChart3, Calendar, Target, FlaskConical, History,
-  Tag, FolderOpen, Folder, Trash2, Sun, Moon, LayoutDashboard, Copy,
+  Tag, FolderOpen, Folder, Trash2, Sun, Moon, LayoutDashboard, Copy, Star, Landmark,
 } from "lucide-react";
 import { format } from "date-fns";
+import { CURRENCIES } from "@/lib/currency";
 
 interface AppSidebarProps {
   activeBudgetId: number | null;
@@ -43,6 +44,7 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
   const [newBudgetPeriod, setNewBudgetPeriod] = useState("monthly");
   const [newBudgetIsFolder, setNewBudgetIsFolder] = useState(false);
   const [newBudgetParentId, setNewBudgetParentId] = useState<string>("none");
+  const [newBudgetCurrency, setNewBudgetCurrency] = useState("USD");
 
   const [showCloneDialog, setShowCloneDialog] = useState(false);
   const [cloneSourceBudget, setCloneSourceBudget] = useState<Budget | null>(null);
@@ -119,6 +121,7 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
       sortOrder: budgets.length,
       isFolder: newBudgetIsFolder,
       parentId: newBudgetParentId !== "none" ? Number(newBudgetParentId) : null,
+      currency: newBudgetCurrency,
     });
   }
 
@@ -153,9 +156,11 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
     { id: "reports", label: "Reports", icon: BarChart3 },
     { id: "annual", label: "Annual Overview", icon: Calendar },
     { id: "goals", label: "Savings Goals", icon: Target },
+    { id: "networth", label: "Net Worth", icon: Landmark },
     { id: "whatif", label: "What If", icon: FlaskConical },
     { id: "history", label: "History", icon: History },
     { id: "tags", label: "Manage Tags", icon: Tag },
+    { id: "favorites", label: "Favorites", icon: Star },
   ];
 
   function renderBudgetItem(budget: Budget, indent = false) {
@@ -277,6 +282,7 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
                 setNewBudgetIsFolder(false);
                 setNewBudgetParentId("none");
                 setNewBudgetName("");
+                setNewBudgetCurrency("USD");
               }
             }}>
               <DialogTrigger asChild>
@@ -320,6 +326,18 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
                           <SelectItem value="monthly">Monthly</SelectItem>
                           <SelectItem value="yearly">Yearly</SelectItem>
                           <SelectItem value="custom">Custom</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={newBudgetCurrency} onValueChange={setNewBudgetCurrency}>
+                        <SelectTrigger data-testid="select-budget-currency">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CURRENCIES.map((c) => (
+                            <SelectItem key={c.code} value={c.code}>
+                              {c.symbol} {c.code} - {c.name}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       {folders.length > 0 && (

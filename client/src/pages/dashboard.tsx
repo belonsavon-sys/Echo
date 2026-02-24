@@ -14,6 +14,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
+import { formatCurrency } from "@/lib/currency";
 
 export default function DashboardPage() {
   const { data: budgets = [], isLoading: budgetsLoading } = useQuery<Budget[]>({
@@ -45,12 +46,26 @@ export default function DashboardPage() {
     (q) => (q.data as Entry[]) || []
   );
 
-  const totalIncome = allEntries
-    .filter((e) => e.type === "income")
-    .reduce((sum, e) => sum + e.amount, 0);
-  const totalExpenses = allEntries
-    .filter((e) => e.type === "expense")
-    .reduce((sum, e) => sum + e.amount, 0);
+  const budgetCurrencyMap = new Map(budgets.map((b) => [b.id, b.currency || "USD"]));
+
+  const currencyTotals = new Map<string, { income: number; expenses: number }>();
+  allEntries.forEach((e) => {
+    const currency = budgetCurrencyMap.get(e.budgetId) || "USD";
+    const existing = currencyTotals.get(currency) || { income: 0, expenses: 0 };
+    if (e.type === "income") {
+      existing.income += e.amount;
+    } else {
+      existing.expenses += e.amount;
+    }
+    currencyTotals.set(currency, existing);
+  });
+
+  const currencyKeys = Array.from(currencyTotals.keys()).sort();
+  const primaryCurrency = currencyKeys[0] || "USD";
+  const primaryTotals = currencyTotals.get(primaryCurrency) || { income: 0, expenses: 0 };
+
+  const totalIncome = primaryTotals.income;
+  const totalExpenses = primaryTotals.expenses;
   const netBalance = totalIncome - totalExpenses;
   const activeBudgets = budgets.filter((b) => b.isActive).length;
 
@@ -114,11 +129,19 @@ export default function DashboardPage() {
               className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums"
               data-testid="text-total-income-all"
             >
-              ${totalIncome.toFixed(2)}
+              {formatCurrency(totalIncome, primaryCurrency)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Across all budgets
+              {currencyKeys.length > 1 ? `${primaryCurrency} budgets` : "Across all budgets"}
             </p>
+            {currencyKeys.filter(c => c !== primaryCurrency).map(c => {
+              const t = currencyTotals.get(c)!;
+              return (
+                <p key={c} className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5 tabular-nums">
+                  +{formatCurrency(t.income, c)}
+                </p>
+              );
+            })}
           </CardContent>
         </Card>
 
@@ -134,11 +157,19 @@ export default function DashboardPage() {
               className="text-2xl font-bold text-red-600 dark:text-red-400 tabular-nums"
               data-testid="text-total-expenses-all"
             >
-              ${totalExpenses.toFixed(2)}
+              {formatCurrency(totalExpenses, primaryCurrency)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Across all budgets
+              {currencyKeys.length > 1 ? `${primaryCurrency} budgets` : "Across all budgets"}
             </p>
+            {currencyKeys.filter(c => c !== primaryCurrency).map(c => {
+              const t = currencyTotals.get(c)!;
+              return (
+                <p key={c} className="text-xs text-red-600 dark:text-red-400 mt-0.5 tabular-nums">
+                  +{formatCurrency(t.expenses, c)}
+                </p>
+              );
+            })}
           </CardContent>
         </Card>
 
@@ -152,11 +183,20 @@ export default function DashboardPage() {
               className={`text-2xl font-bold tabular-nums ${netBalance >= 0 ? "text-blue-600 dark:text-blue-400" : "text-orange-600 dark:text-orange-400"}`}
               data-testid="text-net-balance-all"
             >
-              ${netBalance.toFixed(2)}
+              {formatCurrency(netBalance, primaryCurrency)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Income minus expenses
+              {currencyKeys.length > 1 ? `${primaryCurrency} budgets` : "Income minus expenses"}
             </p>
+            {currencyKeys.filter(c => c !== primaryCurrency).map(c => {
+              const t = currencyTotals.get(c)!;
+              const bal = t.income - t.expenses;
+              return (
+                <p key={c} className={`text-xs mt-0.5 tabular-nums ${bal >= 0 ? "text-blue-600 dark:text-blue-400" : "text-orange-600 dark:text-orange-400"}`}>
+                  {formatCurrency(bal, c)}
+                </p>
+              );
+            })}
           </CardContent>
         </Card>
 
@@ -213,7 +253,7 @@ export default function DashboardPage() {
                     </p>
                   </div>
                   <span className="text-sm font-semibold text-red-600 dark:text-red-400 tabular-nums shrink-0">
-                    -${entry.amount.toFixed(2)}
+                    -{formatCurrency(entry.amount, budgetCurrencyMap.get(entry.budgetId) || "USD")}
                   </span>
                 </div>
               ))}
@@ -257,8 +297,7 @@ export default function DashboardPage() {
                         {goal.name}
                       </span>
                       <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-                        ${goal.currentAmount.toFixed(0)} / $
-                        {goal.targetAmount.toFixed(0)}
+                        {formatCurrency(goal.currentAmount, "USD")} / {formatCurrency(goal.targetAmount, "USD")}
                       </span>
                     </div>
                     <Progress

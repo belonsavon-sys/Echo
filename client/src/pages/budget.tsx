@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Budget, Entry, Category, Tag } from "@shared/schema";
+import type { Budget, Entry, Category, Tag, Favorite } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,9 +14,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Star, Trash2, Edit2, RotateCcw, GripVertical, ChevronDown, ChevronUp, Tag as TagIcon, CalendarIcon, Fuel, Check, X, Download } from "lucide-react";
+import { Plus, Star, Trash2, Edit2, RotateCcw, GripVertical, ChevronDown, ChevronUp, Tag as TagIcon, CalendarIcon, Fuel, Check, X, Download, Zap } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { exportBudgetToCSV } from "@/lib/export-csv";
+import { formatCurrency } from "@/lib/currency";
 
 interface BudgetPageProps {
   budgetId: number;
@@ -43,6 +44,35 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
   const { data: entries = [], isLoading } = useQuery<Entry[]>({ queryKey: ["/api/budgets", budgetId, "entries"] });
   const { data: categoriesData = [] } = useQuery<Category[]>({ queryKey: ["/api/budgets", budgetId, "categories"] });
   const { data: tagsData = [] } = useQuery<Tag[]>({ queryKey: ["/api/tags"] });
+  const { data: favoritesData = [] } = useQuery<Favorite[]>({ queryKey: ["/api/favorites"] });
+
+  const quickAddFromFavorite = useMutation({
+    mutationFn: async (fav: Favorite) => {
+      const data = {
+        budgetId,
+        type: fav.type,
+        name: fav.name,
+        amount: fav.amount,
+        note: fav.note || null,
+        date: format(new Date(), "yyyy-MM-dd"),
+        categoryId: fav.categoryId || null,
+        tagIds: fav.tagIds || null,
+        isPaidOrReceived: false,
+        isStarred: false,
+        sortOrder: entries.length,
+        isRecurring: false,
+        recurringFrequency: null,
+        recurringEndDate: null,
+        recurringParentId: null,
+      };
+      const res = await apiRequest("POST", "/api/entries", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/budgets", budgetId, "entries"] });
+      toast({ title: "Entry added from favorite" });
+    },
+  });
 
   const filteredEntries = filterTag
     ? entries.filter(e => e.tagIds?.includes(filterTag))
@@ -54,6 +84,8 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
   const totalIncome = incomeEntries.reduce((sum, e) => sum + e.amount, 0);
   const totalExpenses = expenseEntries.reduce((sum, e) => sum + e.amount, 0);
   const balance = totalIncome - totalExpenses;
+
+  const budgetCurrency = budget?.currency || "USD";
 
   const paidIncome = incomeEntries.filter(e => e.isPaidOrReceived).reduce((sum, e) => sum + e.amount, 0);
   const paidExpenses = expenseEntries.filter(e => e.isPaidOrReceived).reduce((sum, e) => sum + e.amount, 0);
@@ -270,7 +302,7 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
           className={`text-sm font-semibold tabular-nums shrink-0 ${isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
           data-testid={`text-entry-amount-${entry.id}`}
         >
-          {isIncome ? "+" : "-"}${entry.amount.toFixed(2)}
+          {isIncome ? "+" : "-"}{formatCurrency(entry.amount, budgetCurrency)}
         </span>
 
         <div className="flex items-center gap-0.5">
@@ -318,6 +350,47 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
               </SelectContent>
             </Select>
           )}
+          {favoritesData.length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button size="sm" variant="outline" data-testid="button-quick-add-favorites">
+                  <Zap className="w-3 h-3 mr-1" />
+                  Quick Add
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-2" align="end">
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground px-2 py-1">Add from favorites</p>
+                  {favoritesData.map((fav) => {
+                    const isIncome = fav.type === "income";
+                    return (
+                      <div
+                        key={fav.id}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover-elevate"
+                        data-testid={`quick-add-item-${fav.id}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm truncate block">{fav.name}</span>
+                          <span className={`text-xs ${isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                            {isIncome ? "+" : "-"}{formatCurrency(fav.amount, budgetCurrency)}
+                          </span>
+                        </div>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => quickAddFromFavorite.mutate(fav)}
+                          disabled={quickAddFromFavorite.isPending}
+                          data-testid={`button-quick-add-${fav.id}`}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
           <Button
             size="sm"
             variant="outline"
@@ -335,15 +408,15 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
             <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-md p-3">
               <p className="text-[10px] font-medium text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Income</p>
-              <p className="text-base sm:text-lg font-bold text-emerald-700 dark:text-emerald-400 tabular-nums" data-testid="text-total-income">${totalIncome.toFixed(2)}</p>
+              <p className="text-base sm:text-lg font-bold text-emerald-700 dark:text-emerald-400 tabular-nums" data-testid="text-total-income">{formatCurrency(totalIncome, budgetCurrency)}</p>
             </div>
             <div className="bg-red-50 dark:bg-red-950/30 rounded-md p-3">
               <p className="text-[10px] font-medium text-red-700 dark:text-red-400 uppercase tracking-wider">Expenses</p>
-              <p className="text-base sm:text-lg font-bold text-red-700 dark:text-red-400 tabular-nums" data-testid="text-total-expenses">${totalExpenses.toFixed(2)}</p>
+              <p className="text-base sm:text-lg font-bold text-red-700 dark:text-red-400 tabular-nums" data-testid="text-total-expenses">{formatCurrency(totalExpenses, budgetCurrency)}</p>
             </div>
             <div className={`rounded-md p-3 ${balance >= 0 ? "bg-blue-50 dark:bg-blue-950/30" : "bg-orange-50 dark:bg-orange-950/30"}`}>
               <p className={`text-[10px] font-medium uppercase tracking-wider ${balance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`}>Balance</p>
-              <p className={`text-base sm:text-lg font-bold tabular-nums ${balance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`} data-testid="text-balance">${balance.toFixed(2)}</p>
+              <p className={`text-base sm:text-lg font-bold tabular-nums ${balance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`} data-testid="text-balance">{formatCurrency(balance, budgetCurrency)}</p>
             </div>
           </div>
 
@@ -354,7 +427,7 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
                 <span className="text-xs font-medium">Money Left</span>
               </div>
               <span className={`text-sm font-bold tabular-nums ${moneyLeft >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`} data-testid="text-money-left">
-                ${moneyLeft.toFixed(2)}
+                {formatCurrency(moneyLeft, budgetCurrency)}
               </span>
             </div>
             <Progress
