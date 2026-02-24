@@ -180,11 +180,19 @@ export default function CategoriesSection({ budgetId }: CategoriesProps) {
                   {!hasLimit && spent > 0 && (
                     <span className="text-xs text-muted-foreground tabular-nums">${spent.toFixed(0)}</span>
                   )}
-                  <div className="flex gap-0.5 invisible group-hover:visible">
-                    <button onClick={() => { setEditingId(cat.id); setEditName(cat.name); setEditColor(cat.color); setEditLimit(cat.budgetLimit?.toString() || ""); }} data-testid={`button-edit-category-${cat.id}`}>
+                  <div className="flex gap-0.5">
+                    <button
+                      onClick={() => { setEditingId(cat.id); setEditName(cat.name); setEditColor(cat.color); setEditLimit(cat.budgetLimit?.toString() || ""); }}
+                      className="min-w-[28px] min-h-[28px] flex items-center justify-center"
+                      data-testid={`button-edit-category-${cat.id}`}
+                    >
                       <Edit2 className="w-3 h-3 text-muted-foreground" />
                     </button>
-                    <button onClick={() => deleteCategory.mutate(cat.id)} data-testid={`button-delete-category-${cat.id}`}>
+                    <button
+                      onClick={() => deleteCategory.mutate(cat.id)}
+                      className="min-w-[28px] min-h-[28px] flex items-center justify-center"
+                      data-testid={`button-delete-category-${cat.id}`}
+                    >
                       <Trash2 className="w-3 h-3 text-muted-foreground" />
                     </button>
                   </div>

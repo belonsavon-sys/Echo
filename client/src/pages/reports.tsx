@@ -69,11 +69,11 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="h-full overflow-auto p-4 space-y-6">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold" data-testid="text-reports-title">Spending Reports</h1>
+    <div className="h-full overflow-auto px-3 sm:px-4 py-3 sm:py-4 space-y-4 sm:space-y-6">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h1 className="text-base sm:text-lg font-semibold" data-testid="text-reports-title">Spending Reports</h1>
         <Select value={selectedBudgetId || budgetId?.toString()} onValueChange={setSelectedBudgetId}>
-          <SelectTrigger className="w-[180px]" data-testid="select-report-budget">
+          <SelectTrigger className="w-[160px] sm:w-[180px]" data-testid="select-report-budget">
             <SelectValue placeholder="Select budget" />
           </SelectTrigger>
           <SelectContent>
@@ -84,21 +84,21 @@ export default function ReportsPage() {
         </Select>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-card rounded-md border border-card-border p-4">
-          <h2 className="text-sm font-semibold mb-4">Spending by Category</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="bg-card rounded-md border border-card-border p-3 sm:p-4">
+          <h2 className="text-sm font-semibold mb-3 sm:mb-4">Spending by Category</h2>
           {categorySpending.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No expense data yet</p>
           ) : (
-            <div className="flex items-center justify-center">
-              <ResponsiveContainer width="100%" height={280}>
+            <div className="flex items-center justify-center overflow-x-auto">
+              <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
                   <Pie
                     data={categorySpending}
                     cx="50%"
                     cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
+                    innerRadius={50}
+                    outerRadius={85}
                     paddingAngle={2}
                     dataKey="value"
                     label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
@@ -114,32 +114,34 @@ export default function ReportsPage() {
           )}
         </div>
 
-        <div className="bg-card rounded-md border border-card-border p-4">
-          <h2 className="text-sm font-semibold mb-4">Income vs Expenses (6 months)</h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={monthlyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `$${v}`} />
-              <Tooltip formatter={(value: number) => `$${value.toFixed(2)}`} />
-              <Legend />
-              <Bar dataKey="Income" fill="#10b981" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Expenses" fill="#ef4444" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="bg-card rounded-md border border-card-border p-3 sm:p-4">
+          <h2 className="text-sm font-semibold mb-3 sm:mb-4">Income vs Expenses (6 months)</h2>
+          <div className="overflow-x-auto">
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={monthlyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+                <Tooltip formatter={(value: number) => `$${value.toFixed(2)}`} />
+                <Legend />
+                <Bar dataKey="Income" fill="#10b981" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Expenses" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 
       {categorySpending.filter(c => c.limit).length > 0 && (
-        <div className="bg-card rounded-md border border-card-border p-4">
-          <h2 className="text-sm font-semibold mb-4">Category Budget Limits</h2>
+        <div className="bg-card rounded-md border border-card-border p-3 sm:p-4">
+          <h2 className="text-sm font-semibold mb-3 sm:mb-4">Category Budget Limits</h2>
           <div className="space-y-3">
             {categorySpending.filter(c => c.limit).map((cat, i) => {
               const percent = cat.limit ? Math.min(100, (cat.value / cat.limit) * 100) : 0;
               const isOver = cat.limit ? cat.value > cat.limit : false;
               return (
                 <div key={i}>
-                  <div className="flex items-center justify-between gap-2 text-sm mb-1">
+                  <div className="flex items-center justify-between gap-2 text-sm mb-1 flex-wrap">
                     <span className="font-medium">{cat.name}</span>
                     <span className={isOver ? "text-red-600 dark:text-red-400 font-semibold" : "text-muted-foreground"}>
                       ${cat.value.toFixed(2)} / ${cat.limit?.toFixed(2)}

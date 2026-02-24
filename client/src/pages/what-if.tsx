@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { FlaskConical, Plus, Trash2, ArrowRight } from "lucide-react";
+import { FlaskConical, Plus, Trash2, ArrowRight, ArrowDown } from "lucide-react";
 
 interface Scenario {
   id: string;
@@ -82,14 +82,14 @@ export default function WhatIfPage() {
   }
 
   return (
-    <div className="h-full overflow-auto p-4 space-y-6">
-      <div className="flex items-center justify-between gap-2">
+    <div className="h-full overflow-auto px-3 sm:px-4 py-3 sm:py-4 space-y-4 sm:space-y-6">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <FlaskConical className="w-5 h-5 text-primary" />
-          <h1 className="text-lg font-semibold" data-testid="text-whatif-title">What If Scenario Planner</h1>
+          <h1 className="text-base sm:text-lg font-semibold" data-testid="text-whatif-title">What If Scenario Planner</h1>
         </div>
         <Select value={selectedBudgetId || budgetId?.toString()} onValueChange={setSelectedBudgetId}>
-          <SelectTrigger className="w-[160px]" data-testid="select-whatif-budget">
+          <SelectTrigger className="w-[140px] sm:w-[160px]" data-testid="select-whatif-budget">
             <SelectValue placeholder="Select budget" />
           </SelectTrigger>
           <SelectContent>
@@ -104,47 +104,48 @@ export default function WhatIfPage() {
         Test budget changes without affecting your real data. Add or remove hypothetical income and expenses to see how your balance would change.
       </p>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <div className="space-y-4">
           <h2 className="text-sm font-semibold">Current Budget</h2>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-md p-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-md p-2 sm:p-3">
               <p className="text-[10px] font-medium text-emerald-700 dark:text-emerald-400 uppercase">Income</p>
-              <p className="text-base font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">${currentIncome.toFixed(2)}</p>
+              <p className="text-sm sm:text-base font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">${currentIncome.toFixed(2)}</p>
             </div>
-            <div className="bg-red-50 dark:bg-red-950/30 rounded-md p-3">
+            <div className="bg-red-50 dark:bg-red-950/30 rounded-md p-2 sm:p-3">
               <p className="text-[10px] font-medium text-red-700 dark:text-red-400 uppercase">Expenses</p>
-              <p className="text-base font-bold text-red-700 dark:text-red-400 tabular-nums">${currentExpenses.toFixed(2)}</p>
+              <p className="text-sm sm:text-base font-bold text-red-700 dark:text-red-400 tabular-nums">${currentExpenses.toFixed(2)}</p>
             </div>
-            <div className="bg-blue-50 dark:bg-blue-950/30 rounded-md p-3">
+            <div className="bg-blue-50 dark:bg-blue-950/30 rounded-md p-2 sm:p-3">
               <p className="text-[10px] font-medium text-blue-700 dark:text-blue-400 uppercase">Balance</p>
-              <p className="text-base font-bold text-blue-700 dark:text-blue-400 tabular-nums">${currentBalance.toFixed(2)}</p>
+              <p className="text-sm sm:text-base font-bold text-blue-700 dark:text-blue-400 tabular-nums">${currentBalance.toFixed(2)}</p>
             </div>
           </div>
 
           <div className="flex items-center justify-center py-2">
-            <ArrowRight className="w-5 h-5 text-muted-foreground" />
+            <ArrowDown className="w-5 h-5 text-muted-foreground lg:hidden" />
+            <ArrowRight className="w-5 h-5 text-muted-foreground hidden lg:block" />
           </div>
 
           <h2 className="text-sm font-semibold">Projected Budget</h2>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-md p-3 border-2 border-emerald-200 dark:border-emerald-800">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-md p-2 sm:p-3 border-2 border-emerald-200 dark:border-emerald-800">
               <p className="text-[10px] font-medium text-emerald-700 dark:text-emerald-400 uppercase">Income</p>
-              <p className="text-base font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">${projectedIncome.toFixed(2)}</p>
+              <p className="text-sm sm:text-base font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">${projectedIncome.toFixed(2)}</p>
             </div>
-            <div className="bg-red-50 dark:bg-red-950/30 rounded-md p-3 border-2 border-red-200 dark:border-red-800">
+            <div className="bg-red-50 dark:bg-red-950/30 rounded-md p-2 sm:p-3 border-2 border-red-200 dark:border-red-800">
               <p className="text-[10px] font-medium text-red-700 dark:text-red-400 uppercase">Expenses</p>
-              <p className="text-base font-bold text-red-700 dark:text-red-400 tabular-nums">${projectedExpenses.toFixed(2)}</p>
+              <p className="text-sm sm:text-base font-bold text-red-700 dark:text-red-400 tabular-nums">${projectedExpenses.toFixed(2)}</p>
             </div>
-            <div className={`rounded-md p-3 border-2 ${projectedBalance >= 0 ? "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800" : "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800"}`}>
+            <div className={`rounded-md p-2 sm:p-3 border-2 ${projectedBalance >= 0 ? "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800" : "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800"}`}>
               <p className={`text-[10px] font-medium uppercase ${projectedBalance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`}>Balance</p>
-              <p className={`text-base font-bold tabular-nums ${projectedBalance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`}>${projectedBalance.toFixed(2)}</p>
+              <p className={`text-sm sm:text-base font-bold tabular-nums ${projectedBalance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`}>${projectedBalance.toFixed(2)}</p>
             </div>
           </div>
 
           <div className={`text-center p-3 rounded-md ${balanceDiff > 0 ? "bg-emerald-50 dark:bg-emerald-950/30" : balanceDiff < 0 ? "bg-red-50 dark:bg-red-950/30" : "bg-muted"}`}>
             <p className="text-xs text-muted-foreground">Impact on Balance</p>
-            <p className={`text-xl font-bold tabular-nums ${balanceDiff > 0 ? "text-emerald-600 dark:text-emerald-400" : balanceDiff < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`} data-testid="text-balance-diff">
+            <p className={`text-lg sm:text-xl font-bold tabular-nums ${balanceDiff > 0 ? "text-emerald-600 dark:text-emerald-400" : balanceDiff < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`} data-testid="text-balance-diff">
               {balanceDiff >= 0 ? "+" : ""}${balanceDiff.toFixed(2)}
             </p>
           </div>
@@ -156,7 +157,7 @@ export default function WhatIfPage() {
           <div className="bg-card rounded-md border border-card-border p-3 space-y-3">
             <div className="grid grid-cols-2 gap-2">
               <Select value={newType} onValueChange={(v: "add" | "remove") => setNewType(v)}>
-                <SelectTrigger className="h-8 text-xs" data-testid="select-scenario-type">
+                <SelectTrigger data-testid="select-scenario-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -165,7 +166,7 @@ export default function WhatIfPage() {
                 </SelectContent>
               </Select>
               <Select value={newEntryType} onValueChange={(v: "income" | "expense") => setNewEntryType(v)}>
-                <SelectTrigger className="h-8 text-xs" data-testid="select-scenario-entry-type">
+                <SelectTrigger data-testid="select-scenario-entry-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -174,9 +175,9 @@ export default function WhatIfPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Input placeholder="Name" value={newName} onChange={(e) => setNewName(e.target.value)} className="h-8 text-sm" data-testid="input-scenario-name" />
-              <Input placeholder="Amount" type="number" step="0.01" value={newAmount} onChange={(e) => setNewAmount(e.target.value)} className="h-8 text-sm" data-testid="input-scenario-amount" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Input placeholder="Name" value={newName} onChange={(e) => setNewName(e.target.value)} data-testid="input-scenario-name" />
+              <Input placeholder="Amount" type="number" step="0.01" value={newAmount} onChange={(e) => setNewAmount(e.target.value)} data-testid="input-scenario-amount" />
             </div>
             <Button size="sm" onClick={addScenario} className="w-full" disabled={!newName || !newAmount} data-testid="button-add-scenario">
               <Plus className="w-3.5 h-3.5 mr-1" />

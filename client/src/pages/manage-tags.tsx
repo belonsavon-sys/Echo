@@ -70,17 +70,17 @@ export default function ManageTagsPage() {
   }
 
   return (
-    <div className="h-full overflow-auto p-4 space-y-6">
+    <div className="h-full overflow-auto px-3 sm:px-4 py-3 sm:py-4 space-y-4 sm:space-y-6">
       <div className="flex items-center gap-2">
         <TagIcon className="w-5 h-5 text-primary" />
-        <h1 className="text-lg font-semibold" data-testid="text-tags-title">Manage Tags</h1>
+        <h1 className="text-base sm:text-lg font-semibold" data-testid="text-tags-title">Manage Tags</h1>
       </div>
 
       <p className="text-sm text-muted-foreground">
         Tags let you label entries with custom markers like "tax deductible", "reimbursable", or "impulse buy" for flexible filtering.
       </p>
 
-      <div className="bg-card rounded-md border border-card-border p-4 space-y-3">
+      <div className="bg-card rounded-md border border-card-border p-3 sm:p-4 space-y-3">
         <h2 className="text-sm font-semibold">Create Tag</h2>
         <div className="flex gap-2">
           <Input
@@ -99,7 +99,7 @@ export default function ManageTagsPage() {
           {PRESET_COLORS.map(c => (
             <button
               key={c}
-              className={`w-6 h-6 rounded-full border-2 transition-all ${newColor === c ? "border-foreground scale-110" : "border-transparent"}`}
+              className={`w-7 h-7 sm:w-6 sm:h-6 rounded-full border-2 transition-all ${newColor === c ? "border-foreground scale-110" : "border-transparent"}`}
               style={{ backgroundColor: c }}
               onClick={() => setNewColor(c)}
             />
@@ -116,21 +116,21 @@ export default function ManageTagsPage() {
       ) : (
         <div className="space-y-2">
           {tags.map(tag => (
-            <div key={tag.id} className="flex items-center gap-3 bg-card rounded-md border border-card-border px-4 py-3" data-testid={`tag-item-${tag.id}`}>
+            <div key={tag.id} className="flex items-center gap-2 sm:gap-3 bg-card rounded-md border border-card-border px-3 sm:px-4 py-2.5 sm:py-3" data-testid={`tag-item-${tag.id}`}>
               {editingId === tag.id ? (
                 <>
                   <div className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: editColor }} />
                   <Input
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="flex-1 h-8"
+                    className="flex-1"
                     data-testid={`input-edit-tag-${tag.id}`}
                   />
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 flex-wrap">
                     {PRESET_COLORS.slice(0, 5).map(c => (
                       <button
                         key={c}
-                        className={`w-4 h-4 rounded-full border ${editColor === c ? "border-foreground" : "border-transparent"}`}
+                        className={`w-5 h-5 sm:w-4 sm:h-4 rounded-full border ${editColor === c ? "border-foreground" : "border-transparent"}`}
                         style={{ backgroundColor: c }}
                         onClick={() => setEditColor(c)}
                       />
@@ -143,7 +143,7 @@ export default function ManageTagsPage() {
               ) : (
                 <>
                   <div className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
-                  <span className="text-sm font-medium flex-1">{tag.name}</span>
+                  <span className="text-sm font-medium flex-1 truncate">{tag.name}</span>
                   <Button size="icon" variant="ghost" onClick={() => startEdit(tag)} data-testid={`button-edit-tag-${tag.id}`}>
                     <Edit2 className="w-3.5 h-3.5" />
                   </Button>

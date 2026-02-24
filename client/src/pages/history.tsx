@@ -78,14 +78,14 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="h-full overflow-auto p-4 space-y-4">
-      <div className="flex items-center justify-between gap-2">
+    <div className="h-full overflow-auto px-3 sm:px-4 py-3 sm:py-4 space-y-3 sm:space-y-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <History className="w-5 h-5 text-primary" />
-          <h1 className="text-lg font-semibold" data-testid="text-history-title">Change History</h1>
+          <h1 className="text-base sm:text-lg font-semibold" data-testid="text-history-title">Change History</h1>
         </div>
         <Select value={selectedBudgetId || budgetId?.toString()} onValueChange={setSelectedBudgetId}>
-          <SelectTrigger className="w-[160px]" data-testid="select-history-budget">
+          <SelectTrigger className="w-[140px] sm:w-[160px]" data-testid="select-history-budget">
             <SelectValue placeholder="Select budget" />
           </SelectTrigger>
           <SelectContent>
@@ -111,21 +111,20 @@ export default function HistoryPage() {
             const amount = newData?.amount || prevData?.amount;
 
             return (
-              <div key={record.id} className="bg-card rounded-md border border-card-border px-4 py-3" data-testid={`history-record-${record.id}`}>
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <div className="flex items-center gap-2">
+              <div key={record.id} className="bg-card rounded-md border border-card-border px-3 sm:px-4 py-2.5 sm:py-3" data-testid={`history-record-${record.id}`}>
+                <div className="flex items-start sm:items-center justify-between gap-2 mb-1 flex-wrap">
+                  <div className="flex items-center gap-2 min-w-0 flex-wrap">
                     {getActionIcon(record.action)}
-                    <span className="text-sm font-medium">{entryName}</span>
+                    <span className="text-sm font-medium truncate">{entryName}</span>
                     <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${getActionColor(record.action)}`}>
                       {record.action}
                     </Badge>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     {canUndo(record.action) && (
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-7 text-xs"
                         disabled={undoMutation.isPending}
                         onClick={() => undoMutation.mutate(record.id)}
                         data-testid={`button-undo-${record.id}`}
@@ -134,7 +133,7 @@ export default function HistoryPage() {
                         Undo
                       </Button>
                     )}
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap">
                       {format(new Date(record.timestamp), "MMM d, yyyy h:mm a")}
                     </span>
                   </div>
@@ -143,13 +142,13 @@ export default function HistoryPage() {
                 {record.action === "updated" && prevData && newData && (
                   <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                     {prevData.amount !== newData.amount && (
-                      <p className="flex items-center gap-1">
-                        Amount: ${prevData.amount?.toFixed(2)} <ArrowRight className="w-3 h-3" /> ${newData.amount?.toFixed(2)}
+                      <p className="flex items-center gap-1 flex-wrap">
+                        Amount: ${prevData.amount?.toFixed(2)} <ArrowRight className="w-3 h-3 shrink-0" /> ${newData.amount?.toFixed(2)}
                       </p>
                     )}
                     {prevData.name !== newData.name && (
-                      <p className="flex items-center gap-1">
-                        Name: {prevData.name} <ArrowRight className="w-3 h-3" /> {newData.name}
+                      <p className="flex items-center gap-1 flex-wrap">
+                        Name: {prevData.name} <ArrowRight className="w-3 h-3 shrink-0" /> {newData.name}
                       </p>
                     )}
                     {prevData.isPaidOrReceived !== newData.isPaidOrReceived && (

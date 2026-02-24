@@ -86,9 +86,9 @@ export default function SavingsGoalsPage() {
   const PRESET_COLORS = ["#10b981", "#6366f1", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899"];
 
   return (
-    <div className="h-full overflow-auto p-4 space-y-6">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold" data-testid="text-goals-title">Savings Goals</h1>
+    <div className="h-full overflow-auto px-3 sm:px-4 py-3 sm:py-4 space-y-4 sm:space-y-6">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h1 className="text-base sm:text-lg font-semibold" data-testid="text-goals-title">Savings Goals</h1>
         <Dialog open={showNew} onOpenChange={setShowNew}>
           <DialogTrigger asChild>
             <Button size="sm" data-testid="button-new-goal">
@@ -102,7 +102,7 @@ export default function SavingsGoalsPage() {
             </DialogHeader>
             <div className="space-y-3 pt-2">
               <Input placeholder="Goal name (e.g., Vacation Fund)" value={name} onChange={(e) => setName(e.target.value)} data-testid="input-goal-name" />
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <Input placeholder="Target amount" type="number" step="0.01" value={target} onChange={(e) => setTarget(e.target.value)} data-testid="input-goal-target" />
                 <Input placeholder="Current amount" type="number" step="0.01" value={current} onChange={(e) => setCurrent(e.target.value)} data-testid="input-goal-current" />
               </div>
@@ -117,11 +117,11 @@ export default function SavingsGoalsPage() {
                   <Calendar mode="single" selected={deadline} onSelect={setDeadline} />
                 </PopoverContent>
               </Popover>
-              <div className="flex gap-1.5">
+              <div className="flex gap-1.5 flex-wrap">
                 {PRESET_COLORS.map(c => (
                   <button
                     key={c}
-                    className={`w-6 h-6 rounded-full border-2 ${color === c ? "border-foreground" : "border-transparent"}`}
+                    className={`w-7 h-7 sm:w-6 sm:h-6 rounded-full border-2 ${color === c ? "border-foreground" : "border-transparent"}`}
                     style={{ backgroundColor: c }}
                     onClick={() => setColor(c)}
                   />
@@ -155,7 +155,7 @@ export default function SavingsGoalsPage() {
           <p className="text-xs text-muted-foreground mt-1">Create a goal to start tracking your savings progress.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
           {goals.map(goal => {
             const percent = Math.min(100, (goal.currentAmount / goal.targetAmount) * 100);
             const remaining = Math.max(0, goal.targetAmount - goal.currentAmount);
@@ -163,11 +163,11 @@ export default function SavingsGoalsPage() {
             const isComplete = goal.currentAmount >= goal.targetAmount;
 
             return (
-              <div key={goal.id} className="bg-card rounded-md border border-card-border p-4 space-y-3" data-testid={`card-goal-${goal.id}`}>
+              <div key={goal.id} className="bg-card rounded-md border border-card-border p-3 sm:p-4 space-y-3" data-testid={`card-goal-${goal.id}`}>
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: goal.color }} />
-                    <h3 className="text-sm font-semibold">{goal.name}</h3>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: goal.color }} />
+                    <h3 className="text-sm font-semibold truncate">{goal.name}</h3>
                   </div>
                   <Button size="icon" variant="ghost" onClick={() => deleteGoal.mutate(goal.id)} data-testid={`button-delete-goal-${goal.id}`}>
                     <Trash2 className="w-3.5 h-3.5 text-muted-foreground" />

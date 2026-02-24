@@ -6,6 +6,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import BudgetPage from "@/pages/budget";
 import ReportsPage from "@/pages/reports";
 import AnnualOverviewPage from "@/pages/annual-overview";
@@ -14,7 +16,7 @@ import WhatIfPage from "@/pages/what-if";
 import HistoryPage from "@/pages/history";
 import ManageTagsPage from "@/pages/manage-tags";
 import CategoriesSection from "@/pages/categories";
-import { Wallet } from "lucide-react";
+import { Wallet, Layers } from "lucide-react";
 import { ThemeProvider } from "@/components/theme-provider";
 
 function useDocumentTitle(title: string) {
@@ -38,12 +40,31 @@ function WelcomePage() {
 
 function BudgetView({ budgetId }: { budgetId: number }) {
   useDocumentTitle("Budget | Fudget");
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+
   return (
     <div className="flex h-full">
       <div className="flex-1 min-w-0">
-        <BudgetPage budgetId={budgetId} />
+        <BudgetPage budgetId={budgetId} categoriesButton={
+          <Sheet open={categoriesOpen} onOpenChange={setCategoriesOpen}>
+            <SheetTrigger asChild>
+              <Button size="sm" variant="outline" className="md:hidden" data-testid="button-open-categories-sheet">
+                <Layers className="w-3.5 h-3.5 mr-1" />
+                Categories
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="bottom" className="h-[70vh] overflow-auto">
+              <SheetHeader>
+                <SheetTitle>Categories</SheetTitle>
+              </SheetHeader>
+              <div className="pt-4">
+                <CategoriesSection budgetId={budgetId} />
+              </div>
+            </SheetContent>
+          </Sheet>
+        } />
       </div>
-      <div className="w-64 border-l overflow-auto p-3 hidden lg:block">
+      <div className="w-64 border-l overflow-auto p-3 hidden md:block">
         <CategoriesSection budgetId={budgetId} />
       </div>
     </div>
@@ -80,6 +101,17 @@ function TagsView() {
   return <ManageTagsPage />;
 }
 
+function getPageTitle(location: string): string {
+  if (location === "/reports") return "Reports";
+  if (location === "/annual") return "Annual Overview";
+  if (location === "/goals") return "Savings Goals";
+  if (location === "/whatif") return "What If";
+  if (location === "/history") return "History";
+  if (location === "/tags") return "Manage Tags";
+  if (location.startsWith("/budget/")) return "Budget";
+  return "Fudget Budget";
+}
+
 function AppContent() {
   const [activeBudgetId, setActiveBudgetId] = useState<number | null>(null);
   const [, setLocation] = useLocation();
@@ -95,6 +127,8 @@ function AppContent() {
     if (location.startsWith("/budget/")) return "budget";
     return "home";
   })();
+
+  const pageTitle = getPageTitle(location);
 
   function handleSelectBudget(id: number) {
     setActiveBudgetId(id);
@@ -126,9 +160,9 @@ function AppContent() {
         <div className="flex flex-col flex-1 min-w-0">
           <header className="flex items-center gap-2 px-3 py-2 border-b h-12 shrink-0">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
-            <span className="text-sm font-medium text-muted-foreground">Fudget Budget</span>
+            <span className="text-sm font-medium text-muted-foreground" data-testid="text-page-title">{pageTitle}</span>
           </header>
-          <main className="flex-1 overflow-hidden">
+          <main className="flex-1 overflow-auto">
             <Switch>
               <Route path="/" component={WelcomePage} />
               <Route path="/budget/:id">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -20,9 +20,10 @@ import { exportBudgetToCSV } from "@/lib/export-csv";
 
 interface BudgetPageProps {
   budgetId: number;
+  categoriesButton?: ReactNode;
 }
 
-export default function BudgetPage({ budgetId }: BudgetPageProps) {
+export default function BudgetPage({ budgetId, categoriesButton }: BudgetPageProps) {
   const { toast } = useToast();
   const [showAddEntry, setShowAddEntry] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
@@ -216,7 +217,7 @@ export default function BudgetPage({ budgetId }: BudgetPageProps) {
         <button
           data-testid={`button-star-${entry.id}`}
           onClick={() => toggleStar.mutate({ id: entry.id, isStarred: !entry.isStarred })}
-          className="shrink-0"
+          className="shrink-0 min-w-[28px] min-h-[28px] flex items-center justify-center"
         >
           <Star
             className={`w-4 h-4 ${entry.isStarred ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"}`}
@@ -272,7 +273,7 @@ export default function BudgetPage({ budgetId }: BudgetPageProps) {
           {isIncome ? "+" : "-"}${entry.amount.toFixed(2)}
         </span>
 
-        <div className="flex items-center gap-0.5 invisible group-hover:visible">
+        <div className="flex items-center gap-0.5">
           <Button size="icon" variant="ghost" onClick={() => startEdit(entry)} data-testid={`button-edit-${entry.id}`}>
             <Edit2 className="w-3.5 h-3.5" />
           </Button>
@@ -294,17 +295,18 @@ export default function BudgetPage({ budgetId }: BudgetPageProps) {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="px-4 py-3 border-b flex items-center justify-between gap-2">
-        <div>
-          <h1 className="text-lg font-semibold" data-testid="text-budget-name">{budget?.name || "Budget"}</h1>
+      <div className="px-3 sm:px-4 py-3 border-b flex items-center justify-between gap-2 flex-wrap">
+        <div className="min-w-0">
+          <h1 className="text-base sm:text-lg font-semibold" data-testid="text-budget-name">{budget?.name || "Budget"}</h1>
           {budget?.description && (
             <p className="text-xs text-muted-foreground">{budget.description}</p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {categoriesButton}
           {tagsData.length > 0 && (
             <Select value={filterTag?.toString() || "all"} onValueChange={(v) => setFilterTag(v === "all" ? null : parseInt(v))}>
-              <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-filter-tag">
+              <SelectTrigger className="w-[130px] sm:w-[140px]" data-testid="select-filter-tag">
                 <TagIcon className="w-3 h-3 mr-1" />
                 <SelectValue placeholder="Filter by tag" />
               </SelectTrigger>
@@ -320,7 +322,6 @@ export default function BudgetPage({ budgetId }: BudgetPageProps) {
             size="sm"
             variant="outline"
             onClick={() => exportBudgetToCSV(budget?.name || "Budget", entries, categoriesData, tagsData)}
-            className="h-8 text-xs"
             data-testid="button-export-csv"
           >
             <Download className="w-3 h-3 mr-1" />
@@ -330,19 +331,19 @@ export default function BudgetPage({ budgetId }: BudgetPageProps) {
       </div>
 
       <div className="flex-1 overflow-auto">
-        <div className="p-4 space-y-4">
-          <div className="grid grid-cols-3 gap-3">
+        <div className="px-3 sm:px-4 py-3 sm:py-4 space-y-3 sm:space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
             <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-md p-3">
               <p className="text-[10px] font-medium text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Income</p>
-              <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400 tabular-nums" data-testid="text-total-income">${totalIncome.toFixed(2)}</p>
+              <p className="text-base sm:text-lg font-bold text-emerald-700 dark:text-emerald-400 tabular-nums" data-testid="text-total-income">${totalIncome.toFixed(2)}</p>
             </div>
             <div className="bg-red-50 dark:bg-red-950/30 rounded-md p-3">
               <p className="text-[10px] font-medium text-red-700 dark:text-red-400 uppercase tracking-wider">Expenses</p>
-              <p className="text-lg font-bold text-red-700 dark:text-red-400 tabular-nums" data-testid="text-total-expenses">${totalExpenses.toFixed(2)}</p>
+              <p className="text-base sm:text-lg font-bold text-red-700 dark:text-red-400 tabular-nums" data-testid="text-total-expenses">${totalExpenses.toFixed(2)}</p>
             </div>
             <div className={`rounded-md p-3 ${balance >= 0 ? "bg-blue-50 dark:bg-blue-950/30" : "bg-orange-50 dark:bg-orange-950/30"}`}>
               <p className={`text-[10px] font-medium uppercase tracking-wider ${balance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`}>Balance</p>
-              <p className={`text-lg font-bold tabular-nums ${balance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`} data-testid="text-balance">${balance.toFixed(2)}</p>
+              <p className={`text-base sm:text-lg font-bold tabular-nums ${balance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`} data-testid="text-balance">${balance.toFixed(2)}</p>
             </div>
           </div>
 
@@ -397,7 +398,7 @@ export default function BudgetPage({ budgetId }: BudgetPageProps) {
       </div>
 
       {showAddEntry ? (
-        <div className="border-t p-4 bg-card space-y-3">
+        <div className="border-t px-3 sm:px-4 py-3 sm:py-4 bg-card space-y-3">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">{editingEntry ? "Edit Entry" : "Add Entry"}</h3>
             <Button size="icon" variant="ghost" onClick={resetForm} data-testid="button-cancel-add">
@@ -426,7 +427,7 @@ export default function BudgetPage({ budgetId }: BudgetPageProps) {
             </Button>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Input
               placeholder="Name"
               value={entryName}
@@ -452,7 +453,7 @@ export default function BudgetPage({ budgetId }: BudgetPageProps) {
             data-testid="input-entry-note"
           />
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="justify-start text-left font-normal" data-testid="button-entry-date">
@@ -467,7 +468,7 @@ export default function BudgetPage({ budgetId }: BudgetPageProps) {
 
             {categoriesData.length > 0 && (
               <Select value={entryCategoryId} onValueChange={setEntryCategoryId}>
-                <SelectTrigger className="h-8 text-xs" data-testid="select-entry-category">
+                <SelectTrigger data-testid="select-entry-category">
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -516,9 +517,9 @@ export default function BudgetPage({ budgetId }: BudgetPageProps) {
           </div>
 
           {isRecurring && (
-            <div className="grid grid-cols-2 gap-2 pl-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-6">
               <Select value={recurringFrequency} onValueChange={setRecurringFrequency}>
-                <SelectTrigger className="h-8 text-xs" data-testid="select-recurring-frequency">
+                <SelectTrigger data-testid="select-recurring-frequency">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
