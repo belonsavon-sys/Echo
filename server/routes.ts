@@ -31,6 +31,11 @@ function getNextDate(date: Date, frequency: string): Date {
   }
 }
 
+async function verifyBudgetOwnership(budgetId: number, userId: string): Promise<boolean> {
+  const budget = await storage.getBudget(budgetId, userId);
+  return !!budget;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -117,18 +122,32 @@ export async function registerRoutes(
   });
 
   app.get("/api/budgets/:budgetId/categories", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    if (!(await verifyBudgetOwnership(Number(req.params.budgetId), userId))) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
     const data = await storage.getCategories(Number(req.params.budgetId));
     res.json(data);
   });
 
   app.post("/api/categories", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
     const parsed = insertCategorySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    if (!(await verifyBudgetOwnership(parsed.data.budgetId, userId))) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
     const category = await storage.createCategory(parsed.data);
     res.status(201).json(category);
   });
 
   app.patch("/api/categories/:id", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    const existing = await storage.getCategory(Number(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Category not found" });
+    if (!(await verifyBudgetOwnership(existing.budgetId, userId))) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
     const parsed = insertCategorySchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const category = await storage.updateCategory(Number(req.params.id), parsed.data);
@@ -137,6 +156,12 @@ export async function registerRoutes(
   });
 
   app.delete("/api/categories/:id", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    const existing = await storage.getCategory(Number(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Category not found" });
+    if (!(await verifyBudgetOwnership(existing.budgetId, userId))) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
     await storage.deleteCategory(Number(req.params.id));
     res.status(204).send();
   });
@@ -171,13 +196,21 @@ export async function registerRoutes(
   });
 
   app.get("/api/budgets/:budgetId/entries", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    if (!(await verifyBudgetOwnership(Number(req.params.budgetId), userId))) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
     const data = await storage.getEntries(Number(req.params.budgetId));
     res.json(data);
   });
 
   app.post("/api/entries", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
     const parsed = insertEntrySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    if (!(await verifyBudgetOwnership(parsed.data.budgetId, userId))) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
 
     const entry = await storage.createEntry(parsed.data);
 
@@ -209,8 +242,12 @@ export async function registerRoutes(
   });
 
   app.patch("/api/entries/:id", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
     const existing = await storage.getEntry(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Entry not found" });
+    if (!(await verifyBudgetOwnership(existing.budgetId, userId))) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
 
     const parsed = insertEntrySchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
@@ -229,16 +266,19 @@ export async function registerRoutes(
   });
 
   app.delete("/api/entries/:id", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
     const existing = await storage.getEntry(Number(req.params.id));
-    if (existing) {
-      await storage.createHistory({
-        entryId: existing.id,
-        budgetId: existing.budgetId,
-        action: "deleted",
-        previousData: JSON.stringify(existing),
-        newData: null,
-      });
+    if (!existing) return res.status(404).json({ message: "Entry not found" });
+    if (!(await verifyBudgetOwnership(existing.budgetId, userId))) {
+      return res.status(403).json({ message: "Forbidden" });
     }
+    await storage.createHistory({
+      entryId: existing.id,
+      budgetId: existing.budgetId,
+      action: "deleted",
+      previousData: JSON.stringify(existing),
+      newData: null,
+    });
     await storage.deleteEntry(Number(req.params.id));
     res.status(204).send();
   });
@@ -294,6 +334,10 @@ export async function registerRoutes(
   });
 
   app.get("/api/budgets/:budgetId/history", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    if (!(await verifyBudgetOwnership(Number(req.params.budgetId), userId))) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
     const data = await storage.getHistory(Number(req.params.budgetId));
     res.json(data);
   });
