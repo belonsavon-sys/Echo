@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, useRef, useEffect, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +18,41 @@ import { Plus, Star, Trash2, Edit2, RotateCcw, GripVertical, ChevronDown, Chevro
 import { format, parseISO } from "date-fns";
 import { exportBudgetToCSV } from "@/lib/export-csv";
 import { formatCurrency } from "@/lib/currency";
+
+function useAnimatedNumber(value: number, duration = 500) {
+  const [displayValue, setDisplayValue] = useState(value);
+  const previousValue = useRef(value);
+  const rafRef = useRef<number>();
+
+  useEffect(() => {
+    const start = previousValue.current;
+    const end = value;
+    previousValue.current = value;
+
+    if (start === end) return;
+
+    const startTime = performance.now();
+
+    function animate(currentTime: number) {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayValue(start + (end - start) * eased);
+
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(animate);
+      }
+    }
+
+    rafRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [value, duration]);
+
+  return displayValue;
+}
 
 interface BudgetPageProps {
   budgetId: number;
@@ -86,6 +121,10 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
   const balance = totalIncome - totalExpenses;
 
   const budgetCurrency = budget?.currency || "USD";
+
+  const animatedIncome = useAnimatedNumber(totalIncome);
+  const animatedExpenses = useAnimatedNumber(totalExpenses);
+  const animatedBalance = useAnimatedNumber(balance);
 
   const paidIncome = incomeEntries.filter(e => e.isPaidOrReceived).reduce((sum, e) => sum + e.amount, 0);
   const paidExpenses = expenseEntries.filter(e => e.isPaidOrReceived).reduce((sum, e) => sum + e.amount, 0);
@@ -230,14 +269,15 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
     const categoryColor = getCategoryColor(entry.categoryId);
     const isIncome = entry.type === "income";
     const statusLabel = isIncome ? "Received" : "Paid";
+    const isStarredUnpaidExpense = entry.isStarred && !entry.isPaidOrReceived && entry.type === "expense";
 
     return (
       <div
         key={entry.id}
         data-testid={`entry-row-${entry.id}`}
-        className={`flex items-center gap-2 px-3 py-2.5 group hover-elevate rounded-md transition-all ${
+        className={`flex items-center gap-2 py-2.5 group hover-elevate rounded-md transition-all animate-fade-slide-in ${
           entry.isPaidOrReceived ? "opacity-60" : ""
-        }`}
+        } ${isStarredUnpaidExpense ? "bg-amber-50 dark:bg-amber-950/20 pl-4 pr-3" : "px-3"}`}
       >
         <Checkbox
           data-testid={`checkbox-paid-${entry.id}`}
@@ -249,10 +289,10 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
         <button
           data-testid={`button-star-${entry.id}`}
           onClick={() => toggleStar.mutate({ id: entry.id, isStarred: !entry.isStarred })}
-          className="shrink-0 min-w-[28px] min-h-[28px] flex items-center justify-center"
+          className="shrink-0 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-md"
         >
           <Star
-            className={`w-4 h-4 ${entry.isStarred ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"}`}
+            className={`w-4 h-4 ${entry.isStarred ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"} ${isStarredUnpaidExpense ? "animate-pulse-star" : ""}`}
           />
         </button>
 
@@ -264,6 +304,11 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
             {entry.isPaidOrReceived && (
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                 {statusLabel}
+              </Badge>
+            )}
+            {isStarredUnpaidExpense && (
+              <Badge data-testid="badge-unpaid" variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+                Unpaid
               </Badge>
             )}
             {categoryName && (
@@ -298,12 +343,14 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
           <p className="text-[10px] text-muted-foreground">{format(parseISO(entry.date), "MMM d, yyyy")}</p>
         </div>
 
-        <span
-          className={`text-sm font-semibold tabular-nums shrink-0 ${isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
-          data-testid={`text-entry-amount-${entry.id}`}
-        >
-          {isIncome ? "+" : "-"}{formatCurrency(entry.amount, budgetCurrency)}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span
+            className={`text-sm font-semibold tabular-nums ${isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
+            data-testid={`text-entry-amount-${entry.id}`}
+          >
+            {isIncome ? "+" : "-"}{formatCurrency(entry.amount, budgetCurrency)}
+          </span>
+        </div>
 
         <div className="flex items-center gap-0.5">
           <Button size="icon" variant="ghost" onClick={() => startEdit(entry)} data-testid={`button-edit-${entry.id}`}>
@@ -408,15 +455,15 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
             <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-md p-3">
               <p className="text-[10px] font-medium text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Income</p>
-              <p className="text-base sm:text-lg font-bold text-emerald-700 dark:text-emerald-400 tabular-nums" data-testid="text-total-income">{formatCurrency(totalIncome, budgetCurrency)}</p>
+              <p className="text-base sm:text-lg font-bold text-emerald-700 dark:text-emerald-400 tabular-nums" data-testid="text-total-income">{formatCurrency(animatedIncome, budgetCurrency)}</p>
             </div>
             <div className="bg-red-50 dark:bg-red-950/30 rounded-md p-3">
               <p className="text-[10px] font-medium text-red-700 dark:text-red-400 uppercase tracking-wider">Expenses</p>
-              <p className="text-base sm:text-lg font-bold text-red-700 dark:text-red-400 tabular-nums" data-testid="text-total-expenses">{formatCurrency(totalExpenses, budgetCurrency)}</p>
+              <p className="text-base sm:text-lg font-bold text-red-700 dark:text-red-400 tabular-nums" data-testid="text-total-expenses">{formatCurrency(animatedExpenses, budgetCurrency)}</p>
             </div>
             <div className={`rounded-md p-3 ${balance >= 0 ? "bg-blue-50 dark:bg-blue-950/30" : "bg-orange-50 dark:bg-orange-950/30"}`}>
               <p className={`text-[10px] font-medium uppercase tracking-wider ${balance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`}>Balance</p>
-              <p className={`text-base sm:text-lg font-bold tabular-nums ${balance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`} data-testid="text-balance">{formatCurrency(balance, budgetCurrency)}</p>
+              <p className={`text-base sm:text-lg font-bold tabular-nums ${balance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`} data-testid="text-balance">{formatCurrency(animatedBalance, budgetCurrency)}</p>
             </div>
           </div>
 
@@ -463,7 +510,12 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
               <p className="text-xs text-muted-foreground py-2 text-center">No expense entries yet</p>
             ) : (
               <div className="space-y-0.5">
-                {expenseEntries.map(renderEntry)}
+                {[...expenseEntries].sort((a, b) => {
+                  const aStarredUnpaid = a.isStarred && !a.isPaidOrReceived ? 1 : 0;
+                  const bStarredUnpaid = b.isStarred && !b.isPaidOrReceived ? 1 : 0;
+                  if (bStarredUnpaid !== aStarredUnpaid) return bStarredUnpaid - aStarredUnpaid;
+                  return new Date(b.date).getTime() - new Date(a.date).getTime();
+                }).map(renderEntry)}
               </div>
             )}
           </div>
