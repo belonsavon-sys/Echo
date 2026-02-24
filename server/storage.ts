@@ -78,6 +78,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteBudget(id: number): Promise<void> {
+    const children = await db.select().from(budgets).where(eq(budgets.parentId, id));
+    for (const child of children) {
+      await this.deleteBudget(child.id);
+    }
     await db.delete(entryHistory).where(eq(entryHistory.budgetId, id));
     await db.delete(entries).where(eq(entries.budgetId, id));
     await db.delete(categories).where(eq(categories.budgetId, id));

@@ -8,6 +8,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import DashboardPage from "@/pages/dashboard";
 import BudgetPage from "@/pages/budget";
 import ReportsPage from "@/pages/reports";
 import AnnualOverviewPage from "@/pages/annual-overview";
@@ -25,17 +26,9 @@ function useDocumentTitle(title: string) {
   }, [title]);
 }
 
-function WelcomePage() {
-  useDocumentTitle("Fudget - Simple Budget Tracking");
-  return (
-    <div className="flex flex-col items-center justify-center h-full text-center px-4">
-      <Wallet className="w-16 h-16 text-muted-foreground mb-4" />
-      <h2 className="text-xl font-semibold mb-2">Welcome to Fudget</h2>
-      <p className="text-sm text-muted-foreground max-w-md">
-        Simple, clean budget tracking. Create a budget from the sidebar to get started, or explore the tools available.
-      </p>
-    </div>
-  );
+function DashboardView() {
+  useDocumentTitle("Dashboard | Fudget");
+  return <DashboardPage />;
 }
 
 function BudgetView({ budgetId }: { budgetId: number }) {
@@ -109,7 +102,17 @@ function getPageTitle(location: string): string {
   if (location === "/history") return "History";
   if (location === "/tags") return "Manage Tags";
   if (location.startsWith("/budget/")) return "Budget";
-  return "Fudget Budget";
+  return "Dashboard";
+}
+
+function BudgetRouteHandler({ id, activeBudgetId, setActiveBudgetId }: { id: string; activeBudgetId: number | null; setActiveBudgetId: (id: number) => void }) {
+  const budgetId = Number(id);
+  useEffect(() => {
+    if (budgetId && budgetId !== activeBudgetId) {
+      setActiveBudgetId(budgetId);
+    }
+  }, [budgetId, activeBudgetId, setActiveBudgetId]);
+  return <BudgetView budgetId={budgetId} />;
 }
 
 function AppContent() {
@@ -136,7 +139,9 @@ function AppContent() {
   }
 
   function handleSelectView(view: string) {
-    if (view === "budget" && activeBudgetId) {
+    if (view === "home") {
+      setLocation("/");
+    } else if (view === "budget" && activeBudgetId) {
       setLocation(`/budget/${activeBudgetId}`);
     } else if (view !== "budget") {
       setLocation(`/${view}`);
@@ -164,13 +169,9 @@ function AppContent() {
           </header>
           <main className="flex-1 overflow-auto">
             <Switch>
-              <Route path="/" component={WelcomePage} />
+              <Route path="/" component={DashboardView} />
               <Route path="/budget/:id">
-                {(params) => {
-                  const id = Number(params.id);
-                  if (id && id !== activeBudgetId) setActiveBudgetId(id);
-                  return <BudgetView budgetId={id} />;
-                }}
+                {(params) => <BudgetRouteHandler id={params.id} activeBudgetId={activeBudgetId} setActiveBudgetId={setActiveBudgetId} />}
               </Route>
               <Route path="/reports" component={ReportsView} />
               <Route path="/annual" component={AnnualView} />
@@ -178,7 +179,7 @@ function AppContent() {
               <Route path="/whatif" component={WhatIfView} />
               <Route path="/history" component={HistoryView} />
               <Route path="/tags" component={TagsView} />
-              <Route component={WelcomePage} />
+              <Route component={DashboardView} />
             </Switch>
           </main>
         </div>
