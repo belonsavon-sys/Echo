@@ -15,6 +15,9 @@ export const budgets = pgTable("budgets", {
   sortOrder: integer("sort_order").notNull().default(0),
   rolloverEnabled: boolean("rollover_enabled").notNull().default(false),
   rolloverAmount: real("rollover_amount").notNull().default(0),
+  parentId: integer("parent_id"),
+  isFolder: boolean("is_folder").notNull().default(false),
+  currency: text("currency").notNull().default("USD"),
 });
 
 export const categories = pgTable("categories", {
@@ -72,6 +75,24 @@ export const savingsGoals = pgTable("savings_goals", {
   budgetId: integer("budget_id"),
 });
 
+export const favorites = pgTable("favorites", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: text("name").notNull(),
+  type: text("type").notNull(),
+  amount: real("amount").notNull(),
+  note: text("note"),
+  categoryId: integer("category_id"),
+  tagIds: integer("tag_ids").array(),
+});
+
+export const netWorthAccounts = pgTable("net_worth_accounts", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: text("name").notNull(),
+  balance: real("balance").notNull(),
+  currency: text("currency").notNull().default("USD"),
+  accountType: text("account_type").notNull(),
+});
+
 export const budgetsRelations = relations(budgets, ({ many }) => ({
   entries: many(entries),
   categories: many(categories),
@@ -103,6 +124,8 @@ export const insertTagSchema = createInsertSchema(tags).omit({ id: true });
 export const insertEntrySchema = createInsertSchema(entries).omit({ id: true });
 export const insertEntryHistorySchema = createInsertSchema(entryHistory).omit({ id: true });
 export const insertSavingsGoalSchema = createInsertSchema(savingsGoals).omit({ id: true });
+export const insertFavoriteSchema = createInsertSchema(favorites).omit({ id: true });
+export const insertNetWorthAccountSchema = createInsertSchema(netWorthAccounts).omit({ id: true });
 
 export type Budget = typeof budgets.$inferSelect;
 export type InsertBudget = z.infer<typeof insertBudgetSchema>;
@@ -116,3 +139,7 @@ export type EntryHistory = typeof entryHistory.$inferSelect;
 export type InsertEntryHistory = z.infer<typeof insertEntryHistorySchema>;
 export type SavingsGoal = typeof savingsGoals.$inferSelect;
 export type InsertSavingsGoal = z.infer<typeof insertSavingsGoalSchema>;
+export type Favorite = typeof favorites.$inferSelect;
+export type InsertFavorite = z.infer<typeof insertFavoriteSchema>;
+export type NetWorthAccount = typeof netWorthAccounts.$inferSelect;
+export type InsertNetWorthAccount = z.infer<typeof insertNetWorthAccountSchema>;

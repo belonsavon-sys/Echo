@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertBudgetSchema, insertCategorySchema, insertTagSchema, insertEntrySchema, insertSavingsGoalSchema } from "@shared/schema";
+import { insertBudgetSchema, insertCategorySchema, insertTagSchema, insertEntrySchema, insertSavingsGoalSchema, insertFavoriteSchema, insertNetWorthAccountSchema } from "@shared/schema";
 import { addDays, addWeeks, addMonths, addYears, endOfYear, isBefore, parseISO, format } from "date-fns";
 
 function generateRecurringDates(startDate: string, frequency: string, endDate: string): string[] {
@@ -310,6 +310,69 @@ export async function registerRoutes(
   app.delete("/api/savings-goals/:id", async (req, res) => {
     await storage.deleteSavingsGoal(Number(req.params.id));
     res.status(204).send();
+  });
+
+  app.get("/api/favorites", async (_req, res) => {
+    const data = await storage.getFavorites();
+    res.json(data);
+  });
+
+  app.post("/api/favorites", async (req, res) => {
+    const parsed = insertFavoriteSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const favorite = await storage.createFavorite(parsed.data);
+    res.status(201).json(favorite);
+  });
+
+  app.patch("/api/favorites/:id", async (req, res) => {
+    const parsed = insertFavoriteSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const favorite = await storage.updateFavorite(Number(req.params.id), parsed.data);
+    if (!favorite) return res.status(404).json({ message: "Favorite not found" });
+    res.json(favorite);
+  });
+
+  app.delete("/api/favorites/:id", async (req, res) => {
+    await storage.deleteFavorite(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  app.get("/api/net-worth-accounts", async (_req, res) => {
+    const data = await storage.getNetWorthAccounts();
+    res.json(data);
+  });
+
+  app.post("/api/net-worth-accounts", async (req, res) => {
+    const parsed = insertNetWorthAccountSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const account = await storage.createNetWorthAccount(parsed.data);
+    res.status(201).json(account);
+  });
+
+  app.patch("/api/net-worth-accounts/:id", async (req, res) => {
+    const parsed = insertNetWorthAccountSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const account = await storage.updateNetWorthAccount(Number(req.params.id), parsed.data);
+    if (!account) return res.status(404).json({ message: "Account not found" });
+    res.json(account);
+  });
+
+  app.delete("/api/net-worth-accounts/:id", async (req, res) => {
+    await storage.deleteNetWorthAccount(Number(req.params.id));
+    res.status(204).send();
+  });
+
+  app.post("/api/budgets/:id/clone", async (req, res) => {
+    const { name, parentId } = req.body;
+    if (!name || typeof name !== "string") {
+      return res.status(400).json({ message: "name is required" });
+    }
+    try {
+      const cloned = await storage.cloneBudget(Number(req.params.id), name, parentId);
+      res.status(201).json(cloned);
+    } catch (err: any) {
+      res.status(404).json({ message: err.message });
+    }
   });
 
   return httpServer;

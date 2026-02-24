@@ -5,7 +5,9 @@ import {
   type Entry, type InsertEntry,
   type EntryHistory, type InsertEntryHistory,
   type SavingsGoal, type InsertSavingsGoal,
-  budgets, categories, tags, entries, entryHistory, savingsGoals,
+  type Favorite, type InsertFavorite,
+  type NetWorthAccount, type InsertNetWorthAccount,
+  budgets, categories, tags, entries, entryHistory, savingsGoals, favorites, netWorthAccounts,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc } from "drizzle-orm";
@@ -41,6 +43,18 @@ export interface IStorage {
   createSavingsGoal(goal: InsertSavingsGoal): Promise<SavingsGoal>;
   updateSavingsGoal(id: number, goal: Partial<InsertSavingsGoal>): Promise<SavingsGoal | undefined>;
   deleteSavingsGoal(id: number): Promise<void>;
+
+  getFavorites(): Promise<Favorite[]>;
+  createFavorite(favorite: InsertFavorite): Promise<Favorite>;
+  updateFavorite(id: number, favorite: Partial<InsertFavorite>): Promise<Favorite | undefined>;
+  deleteFavorite(id: number): Promise<void>;
+
+  getNetWorthAccounts(): Promise<NetWorthAccount[]>;
+  createNetWorthAccount(account: InsertNetWorthAccount): Promise<NetWorthAccount>;
+  updateNetWorthAccount(id: number, account: Partial<InsertNetWorthAccount>): Promise<NetWorthAccount | undefined>;
+  deleteNetWorthAccount(id: number): Promise<void>;
+
+  cloneBudget(sourceId: number, newName: string, parentId?: number): Promise<Budget>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -165,6 +179,78 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSavingsGoal(id: number): Promise<void> {
     await db.delete(savingsGoals).where(eq(savingsGoals.id, id));
+  }
+
+  async getFavorites(): Promise<Favorite[]> {
+    return db.select().from(favorites);
+  }
+
+  async createFavorite(favorite: InsertFavorite): Promise<Favorite> {
+    const [created] = await db.insert(favorites).values(favorite).returning();
+    return created;
+  }
+
+  async updateFavorite(id: number, favorite: Partial<InsertFavorite>): Promise<Favorite | undefined> {
+    const [updated] = await db.update(favorites).set(favorite).where(eq(favorites.id, id)).returning();
+    return updated;
+  }
+
+  async deleteFavorite(id: number): Promise<void> {
+    await db.delete(favorites).where(eq(favorites.id, id));
+  }
+
+  async getNetWorthAccounts(): Promise<NetWorthAccount[]> {
+    return db.select().from(netWorthAccounts);
+  }
+
+  async createNetWorthAccount(account: InsertNetWorthAccount): Promise<NetWorthAccount> {
+    const [created] = await db.insert(netWorthAccounts).values(account).returning();
+    return created;
+  }
+
+  async updateNetWorthAccount(id: number, account: Partial<InsertNetWorthAccount>): Promise<NetWorthAccount | undefined> {
+    const [updated] = await db.update(netWorthAccounts).set(account).where(eq(netWorthAccounts.id, id)).returning();
+    return updated;
+  }
+
+  async deleteNetWorthAccount(id: number): Promise<void> {
+    await db.delete(netWorthAccounts).where(eq(netWorthAccounts.id, id));
+  }
+
+  async cloneBudget(sourceId: number, newName: string, parentId?: number): Promise<Budget> {
+    const source = await this.getBudget(sourceId);
+    if (!source) throw new Error("Source budget not found");
+
+    const { id, ...budgetData } = source;
+    const [newBudget] = await db.insert(budgets).values({
+      ...budgetData,
+      name: newName,
+      parentId: parentId ?? null,
+    }).returning();
+
+    const sourceCategories = await this.getCategories(sourceId);
+    const categoryIdMap = new Map<number, number>();
+
+    for (const cat of sourceCategories) {
+      const { id: oldCatId, ...catData } = cat;
+      const [newCat] = await db.insert(categories).values({
+        ...catData,
+        budgetId: newBudget.id,
+      }).returning();
+      categoryIdMap.set(oldCatId, newCat.id);
+    }
+
+    const sourceEntries = await this.getEntries(sourceId);
+    for (const entry of sourceEntries) {
+      const { id: _entryId, ...entryData } = entry;
+      await db.insert(entries).values({
+        ...entryData,
+        budgetId: newBudget.id,
+        categoryId: entry.categoryId ? (categoryIdMap.get(entry.categoryId) ?? null) : null,
+      });
+    }
+
+    return newBudget;
   }
 }
 
