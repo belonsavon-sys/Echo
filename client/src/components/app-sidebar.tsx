@@ -26,8 +26,9 @@ import { useTheme } from "@/components/theme-provider";
 import {
   Wallet, Plus, BarChart3, Calendar, Target, FlaskConical, History,
   Tag, FolderOpen, Folder, Trash2, Sun, Moon, LayoutDashboard, Copy, Star, Landmark,
-  ArrowLeftRight,
+  ArrowLeftRight, LogOut,
 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
 import { CURRENCIES } from "@/lib/currency";
 
@@ -39,6 +40,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelectView }: AppSidebarProps) {
+  const { user } = useAuth();
   const { darkMode, setDarkMode, theme, setTheme, themes } = useTheme();
   const [showNewBudget, setShowNewBudget] = useState(false);
   const [newBudgetName, setNewBudgetName] = useState("");
@@ -255,6 +257,19 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
           <Wallet className="w-5 h-5 text-primary" />
           <span className="text-base font-bold tracking-tight">Fudget</span>
         </div>
+        {user && (
+          <div className="flex items-center gap-2 mt-2 px-1">
+            {user.profileImageUrl && (
+              <img src={user.profileImageUrl} alt="" className="w-6 h-6 rounded-full" data-testid="img-user-avatar" />
+            )}
+            <span className="text-xs text-muted-foreground truncate flex-1" data-testid="text-user-name">
+              {user.firstName || user.email || "User"}
+            </span>
+            <a href="/api/logout" className="text-xs text-muted-foreground hover:text-foreground" data-testid="button-logout">
+              <LogOut className="w-3.5 h-3.5" />
+            </a>
+          </div>
+        )}
       </SidebarHeader>
 
       <SidebarContent>

@@ -20,8 +20,10 @@ import FavoritesPage from "@/pages/favorites";
 import NetWorthPage from "@/pages/net-worth";
 import ComparePage from "@/pages/compare";
 import CategoriesSection from "@/pages/categories";
-import { Wallet, Layers } from "lucide-react";
+import { Wallet, Layers, Loader2 } from "lucide-react";
 import { ThemeProvider } from "@/components/theme-provider";
+import { useAuth } from "@/hooks/use-auth";
+import LandingPage from "@/pages/landing";
 
 function useDocumentTitle(title: string) {
   useEffect(() => {
@@ -215,13 +217,31 @@ function AppContent() {
   );
 }
 
+function AuthGate() {
+  const { isLoading, isAuthenticated } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LandingPage />;
+  }
+
+  return <AppContent />;
+}
+
 function App() {
   return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />
-          <AppContent />
+          <AuthGate />
         </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>

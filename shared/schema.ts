@@ -18,6 +18,7 @@ export const budgets = pgTable("budgets", {
   parentId: integer("parent_id"),
   isFolder: boolean("is_folder").notNull().default(false),
   currency: text("currency").notNull().default("USD"),
+  userId: text("user_id"),
 });
 
 export const categories = pgTable("categories", {
@@ -32,8 +33,9 @@ export const categories = pgTable("categories", {
 
 export const tags = pgTable("tags", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  name: text("name").notNull().unique(),
+  name: text("name").notNull(),
   color: text("color").notNull().default("#8b5cf6"),
+  userId: text("user_id"),
 });
 
 export const entries = pgTable("entries", {
@@ -73,6 +75,7 @@ export const savingsGoals = pgTable("savings_goals", {
   deadline: date("deadline"),
   color: text("color").notNull().default("#10b981"),
   budgetId: integer("budget_id"),
+  userId: text("user_id"),
 });
 
 export const favorites = pgTable("favorites", {
@@ -83,6 +86,7 @@ export const favorites = pgTable("favorites", {
   note: text("note"),
   categoryId: integer("category_id"),
   tagIds: integer("tag_ids").array(),
+  userId: text("user_id"),
 });
 
 export const netWorthAccounts = pgTable("net_worth_accounts", {
@@ -91,6 +95,7 @@ export const netWorthAccounts = pgTable("net_worth_accounts", {
   balance: real("balance").notNull(),
   currency: text("currency").notNull().default("USD"),
   accountType: text("account_type").notNull(),
+  userId: text("user_id"),
 });
 
 export const budgetsRelations = relations(budgets, ({ many }) => ({
@@ -143,3 +148,5 @@ export type Favorite = typeof favorites.$inferSelect;
 export type InsertFavorite = z.infer<typeof insertFavoriteSchema>;
 export type NetWorthAccount = typeof netWorthAccounts.$inferSelect;
 export type InsertNetWorthAccount = z.infer<typeof insertNetWorthAccountSchema>;
+
+export * from "./models/auth";

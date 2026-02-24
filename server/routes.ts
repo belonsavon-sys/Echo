@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertBudgetSchema, insertCategorySchema, insertTagSchema, insertEntrySchema, insertSavingsGoalSchema, insertFavoriteSchema, insertNetWorthAccountSchema } from "@shared/schema";
 import { addDays, addWeeks, addMonths, addYears, endOfYear, isBefore, parseISO, format } from "date-fns";
+import { isAuthenticated } from "./replit_integrations/auth";
 
 function generateRecurringDates(startDate: string, frequency: string, endDate: string): string[] {
   const dates: string[] = [];
@@ -35,39 +36,45 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  app.get("/api/budgets", async (_req, res) => {
-    const data = await storage.getBudgets();
+  app.get("/api/budgets", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    const data = await storage.getBudgets(userId);
     res.json(data);
   });
 
-  app.get("/api/budgets/:id", async (req, res) => {
-    const budget = await storage.getBudget(Number(req.params.id));
+  app.get("/api/budgets/:id", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    const budget = await storage.getBudget(Number(req.params.id), userId);
     if (!budget) return res.status(404).json({ message: "Budget not found" });
     res.json(budget);
   });
 
-  app.post("/api/budgets", async (req, res) => {
-    const parsed = insertBudgetSchema.safeParse(req.body);
+  app.post("/api/budgets", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    const parsed = insertBudgetSchema.safeParse({ ...req.body, userId });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const budget = await storage.createBudget(parsed.data);
     res.status(201).json(budget);
   });
 
-  app.patch("/api/budgets/:id", async (req, res) => {
+  app.patch("/api/budgets/:id", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
     const parsed = insertBudgetSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    const budget = await storage.updateBudget(Number(req.params.id), parsed.data);
+    const budget = await storage.updateBudget(Number(req.params.id), parsed.data, userId);
     if (!budget) return res.status(404).json({ message: "Budget not found" });
     res.json(budget);
   });
 
-  app.delete("/api/budgets/:id", async (req, res) => {
-    await storage.deleteBudget(Number(req.params.id));
+  app.delete("/api/budgets/:id", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    await storage.deleteBudget(Number(req.params.id), userId);
     res.status(204).send();
   });
 
-  app.post("/api/budgets/:id/rollover", async (req, res) => {
-    const budget = await storage.getBudget(Number(req.params.id));
+  app.post("/api/budgets/:id/rollover", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    const budget = await storage.getBudget(Number(req.params.id), userId);
     if (!budget) return res.status(404).json({ message: "Budget not found" });
 
     const entries = await storage.getEntries(budget.id);
@@ -78,13 +85,13 @@ export async function registerRoutes(
     const { targetBudgetId } = req.body;
     if (!targetBudgetId) return res.status(400).json({ message: "targetBudgetId required" });
 
-    const targetBudget = await storage.getBudget(targetBudgetId);
+    const targetBudget = await storage.getBudget(targetBudgetId, userId);
     if (!targetBudget) return res.status(404).json({ message: "Target budget not found" });
 
     await storage.updateBudget(targetBudgetId, {
       rolloverAmount: (targetBudget.rolloverAmount || 0) + surplus,
       rolloverEnabled: true,
-    });
+    }, userId);
 
     if (surplus !== 0) {
       await storage.createEntry({
@@ -109,19 +116,19 @@ export async function registerRoutes(
     res.json({ message: "Rollover complete", amount: surplus });
   });
 
-  app.get("/api/budgets/:budgetId/categories", async (req, res) => {
+  app.get("/api/budgets/:budgetId/categories", isAuthenticated, async (req, res) => {
     const data = await storage.getCategories(Number(req.params.budgetId));
     res.json(data);
   });
 
-  app.post("/api/categories", async (req, res) => {
+  app.post("/api/categories", isAuthenticated, async (req, res) => {
     const parsed = insertCategorySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const category = await storage.createCategory(parsed.data);
     res.status(201).json(category);
   });
 
-  app.patch("/api/categories/:id", async (req, res) => {
+  app.patch("/api/categories/:id", isAuthenticated, async (req, res) => {
     const parsed = insertCategorySchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const category = await storage.updateCategory(Number(req.params.id), parsed.data);
@@ -129,42 +136,46 @@ export async function registerRoutes(
     res.json(category);
   });
 
-  app.delete("/api/categories/:id", async (req, res) => {
+  app.delete("/api/categories/:id", isAuthenticated, async (req, res) => {
     await storage.deleteCategory(Number(req.params.id));
     res.status(204).send();
   });
 
-  app.get("/api/tags", async (_req, res) => {
-    const data = await storage.getTags();
+  app.get("/api/tags", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    const data = await storage.getTags(userId);
     res.json(data);
   });
 
-  app.post("/api/tags", async (req, res) => {
-    const parsed = insertTagSchema.safeParse(req.body);
+  app.post("/api/tags", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    const parsed = insertTagSchema.safeParse({ ...req.body, userId });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const tag = await storage.createTag(parsed.data);
     res.status(201).json(tag);
   });
 
-  app.patch("/api/tags/:id", async (req, res) => {
+  app.patch("/api/tags/:id", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
     const parsed = insertTagSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    const tag = await storage.updateTag(Number(req.params.id), parsed.data);
+    const tag = await storage.updateTag(Number(req.params.id), parsed.data, userId);
     if (!tag) return res.status(404).json({ message: "Tag not found" });
     res.json(tag);
   });
 
-  app.delete("/api/tags/:id", async (req, res) => {
-    await storage.deleteTag(Number(req.params.id));
+  app.delete("/api/tags/:id", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    await storage.deleteTag(Number(req.params.id), userId);
     res.status(204).send();
   });
 
-  app.get("/api/budgets/:budgetId/entries", async (req, res) => {
+  app.get("/api/budgets/:budgetId/entries", isAuthenticated, async (req, res) => {
     const data = await storage.getEntries(Number(req.params.budgetId));
     res.json(data);
   });
 
-  app.post("/api/entries", async (req, res) => {
+  app.post("/api/entries", isAuthenticated, async (req, res) => {
     const parsed = insertEntrySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
 
@@ -197,7 +208,7 @@ export async function registerRoutes(
     res.status(201).json(entry);
   });
 
-  app.patch("/api/entries/:id", async (req, res) => {
+  app.patch("/api/entries/:id", isAuthenticated, async (req, res) => {
     const existing = await storage.getEntry(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Entry not found" });
 
@@ -217,7 +228,7 @@ export async function registerRoutes(
     res.json(updated);
   });
 
-  app.delete("/api/entries/:id", async (req, res) => {
+  app.delete("/api/entries/:id", isAuthenticated, async (req, res) => {
     const existing = await storage.getEntry(Number(req.params.id));
     if (existing) {
       await storage.createHistory({
@@ -232,9 +243,10 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
-  app.post("/api/history/:id/undo", async (req, res) => {
+  app.post("/api/history/:id/undo", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
     const historyId = Number(req.params.id);
-    const allBudgets = await storage.getBudgets();
+    const allBudgets = await storage.getBudgets(userId);
     let targetRecord = null;
 
     for (const budget of allBudgets) {
@@ -281,94 +293,107 @@ export async function registerRoutes(
     res.status(400).json({ message: "Cannot undo this action" });
   });
 
-  app.get("/api/budgets/:budgetId/history", async (req, res) => {
+  app.get("/api/budgets/:budgetId/history", isAuthenticated, async (req, res) => {
     const data = await storage.getHistory(Number(req.params.budgetId));
     res.json(data);
   });
 
-  app.get("/api/savings-goals", async (req, res) => {
+  app.get("/api/savings-goals", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
     const budgetId = req.query.budgetId ? Number(req.query.budgetId) : undefined;
-    const data = await storage.getSavingsGoals(budgetId);
+    const data = await storage.getSavingsGoals(budgetId, userId);
     res.json(data);
   });
 
-  app.post("/api/savings-goals", async (req, res) => {
-    const parsed = insertSavingsGoalSchema.safeParse(req.body);
+  app.post("/api/savings-goals", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    const parsed = insertSavingsGoalSchema.safeParse({ ...req.body, userId });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const goal = await storage.createSavingsGoal(parsed.data);
     res.status(201).json(goal);
   });
 
-  app.patch("/api/savings-goals/:id", async (req, res) => {
+  app.patch("/api/savings-goals/:id", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
     const parsed = insertSavingsGoalSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    const goal = await storage.updateSavingsGoal(Number(req.params.id), parsed.data);
+    const goal = await storage.updateSavingsGoal(Number(req.params.id), parsed.data, userId);
     if (!goal) return res.status(404).json({ message: "Goal not found" });
     res.json(goal);
   });
 
-  app.delete("/api/savings-goals/:id", async (req, res) => {
-    await storage.deleteSavingsGoal(Number(req.params.id));
+  app.delete("/api/savings-goals/:id", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    await storage.deleteSavingsGoal(Number(req.params.id), userId);
     res.status(204).send();
   });
 
-  app.get("/api/favorites", async (_req, res) => {
-    const data = await storage.getFavorites();
+  app.get("/api/favorites", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    const data = await storage.getFavorites(userId);
     res.json(data);
   });
 
-  app.post("/api/favorites", async (req, res) => {
-    const parsed = insertFavoriteSchema.safeParse(req.body);
+  app.post("/api/favorites", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    const parsed = insertFavoriteSchema.safeParse({ ...req.body, userId });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const favorite = await storage.createFavorite(parsed.data);
     res.status(201).json(favorite);
   });
 
-  app.patch("/api/favorites/:id", async (req, res) => {
+  app.patch("/api/favorites/:id", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
     const parsed = insertFavoriteSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    const favorite = await storage.updateFavorite(Number(req.params.id), parsed.data);
+    const favorite = await storage.updateFavorite(Number(req.params.id), parsed.data, userId);
     if (!favorite) return res.status(404).json({ message: "Favorite not found" });
     res.json(favorite);
   });
 
-  app.delete("/api/favorites/:id", async (req, res) => {
-    await storage.deleteFavorite(Number(req.params.id));
+  app.delete("/api/favorites/:id", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    await storage.deleteFavorite(Number(req.params.id), userId);
     res.status(204).send();
   });
 
-  app.get("/api/net-worth-accounts", async (_req, res) => {
-    const data = await storage.getNetWorthAccounts();
+  app.get("/api/net-worth-accounts", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    const data = await storage.getNetWorthAccounts(userId);
     res.json(data);
   });
 
-  app.post("/api/net-worth-accounts", async (req, res) => {
-    const parsed = insertNetWorthAccountSchema.safeParse(req.body);
+  app.post("/api/net-worth-accounts", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    const parsed = insertNetWorthAccountSchema.safeParse({ ...req.body, userId });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const account = await storage.createNetWorthAccount(parsed.data);
     res.status(201).json(account);
   });
 
-  app.patch("/api/net-worth-accounts/:id", async (req, res) => {
+  app.patch("/api/net-worth-accounts/:id", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
     const parsed = insertNetWorthAccountSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    const account = await storage.updateNetWorthAccount(Number(req.params.id), parsed.data);
+    const account = await storage.updateNetWorthAccount(Number(req.params.id), parsed.data, userId);
     if (!account) return res.status(404).json({ message: "Account not found" });
     res.json(account);
   });
 
-  app.delete("/api/net-worth-accounts/:id", async (req, res) => {
-    await storage.deleteNetWorthAccount(Number(req.params.id));
+  app.delete("/api/net-worth-accounts/:id", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
+    await storage.deleteNetWorthAccount(Number(req.params.id), userId);
     res.status(204).send();
   });
 
-  app.post("/api/budgets/:id/clone", async (req, res) => {
+  app.post("/api/budgets/:id/clone", isAuthenticated, async (req, res) => {
+    const userId = (req as any).user?.claims?.sub;
     const { name, parentId } = req.body;
     if (!name || typeof name !== "string") {
       return res.status(400).json({ message: "name is required" });
     }
     try {
-      const cloned = await storage.cloneBudget(Number(req.params.id), name, parentId);
+      const cloned = await storage.cloneBudget(Number(req.params.id), name, parentId, userId);
       res.status(201).json(cloned);
     } catch (err: any) {
       res.status(404).json({ message: err.message });
