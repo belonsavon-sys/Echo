@@ -18,7 +18,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Wallet, Plus, BarChart3, Calendar, Target, FlaskConical, History, Tag, FolderOpen, Trash2, Settings } from "lucide-react";
+import { Switch as SwitchComponent } from "@/components/ui/switch";
+import { useTheme } from "@/components/theme-provider";
+import { Wallet, Plus, BarChart3, Calendar, Target, FlaskConical, History, Tag, FolderOpen, Trash2, Settings, Sun, Moon } from "lucide-react";
 import { format } from "date-fns";
 
 interface AppSidebarProps {
@@ -29,6 +31,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelectView }: AppSidebarProps) {
+  const { darkMode, setDarkMode, theme, setTheme, themes } = useTheme();
   const [showNewBudget, setShowNewBudget] = useState(false);
   const [newBudgetName, setNewBudgetName] = useState("");
   const [newBudgetPeriod, setNewBudgetPeriod] = useState("monthly");
@@ -183,8 +186,33 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="px-4 py-2">
-        <p className="text-[10px] text-muted-foreground text-center">Simple Budget Tracking</p>
+      <SidebarFooter className="px-3 py-3 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {darkMode ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
+            <span>{darkMode ? "Dark" : "Light"}</span>
+          </div>
+          <SwitchComponent
+            checked={darkMode}
+            onCheckedChange={setDarkMode}
+            data-testid="button-dark-mode-toggle"
+          />
+        </div>
+        <div className="flex items-center flex-wrap gap-1.5">
+          {themes.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTheme(t.id)}
+              className="w-5 h-5 rounded-full shrink-0 transition-shadow"
+              style={{
+                backgroundColor: t.preview,
+                boxShadow: theme === t.id ? `0 0 0 2px hsl(var(--sidebar)), 0 0 0 4px ${t.preview}` : "none",
+              }}
+              title={t.name}
+              data-testid={`button-theme-${t.id}`}
+            />
+          ))}
+        </div>
       </SidebarFooter>
     </Sidebar>
   );

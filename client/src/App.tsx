@@ -15,6 +15,7 @@ import HistoryPage from "@/pages/history";
 import ManageTagsPage from "@/pages/manage-tags";
 import CategoriesSection from "@/pages/categories";
 import { Wallet } from "lucide-react";
+import { ThemeProvider } from "@/components/theme-provider";
 
 function useDocumentTitle(title: string) {
   useEffect(() => {
@@ -154,12 +155,14 @@ function AppContent() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <AppContent />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <AppContent />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }
 
