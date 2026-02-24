@@ -4,6 +4,10 @@
 A mobile-first minimalist budget tracking application inspired by Fudget. Features hierarchical budget folders, dark mode with 10 color themes, income/expense management with smart status marking, recurring entries, envelope/category budgeting, custom tags, spending reports with comparisons and predictions, savings goals tracking, what-if scenario planning, annual overview, change history with undo, CSV export, quick-add favorites, net worth tracker, multi-currency support, budget comparison, and PWA support.
 
 ## Recent Changes
+- 2026-02-24: Multi-user authentication via Replit Auth (OIDC) with data isolation
+- 2026-02-24: Landing page for unauthenticated users, user profile & logout in sidebar
+- 2026-02-24: userId columns on budgets, tags, favorites, netWorthAccounts, savingsGoals
+- 2026-02-24: All API routes protected with isAuthenticated middleware + budget ownership verification
 - 2026-02-24: Initial build with full feature set
 - 2026-02-24: Added hierarchical budget folders with collapse/expand
 - 2026-02-24: Dark mode toggle + 10 preset color themes (Default, Ocean, Sunset, Forest, Midnight, Rose, Amber, Lavender, Slate, Coral)
@@ -31,9 +35,13 @@ A mobile-first minimalist budget tracking application inspired by Fudget. Featur
 
 ### Structure
 - `shared/schema.ts` - Data model (budgets with folders/currency, entries, categories, tags, history, savings goals, favorites, net worth accounts)
-- `server/routes.ts` - REST API routes with Zod validation
-- `server/storage.ts` - Database storage interface (IStorage + DatabaseStorage) with cascade delete
-- `client/src/App.tsx` - Main app with wouter routing and responsive layout
+- `shared/models/auth.ts` - Auth schema (users, sessions tables)
+- `server/replit_integrations/auth/` - Replit Auth OIDC integration
+- `server/routes.ts` - REST API routes with Zod validation, isAuthenticated middleware, budget ownership checks
+- `server/storage.ts` - Database storage interface with userId filtering and cascade delete
+- `client/src/App.tsx` - Main app with AuthGate (landing page vs app), wouter routing
+- `client/src/pages/landing.tsx` - Landing page for unauthenticated users
+- `client/src/hooks/use-auth.ts` - Auth state hook (useAuth)
 - `client/src/pages/dashboard.tsx` - Home page with cross-budget summary
 - `client/src/pages/budget.tsx` - Core budget page with entry management, animated counters
 - `client/src/pages/reports.tsx` - Enhanced reports with comparisons, predictions, analytics

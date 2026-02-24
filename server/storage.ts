@@ -90,6 +90,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteBudget(id: number, userId: string): Promise<void> {
+    const ownerCheck = userId
+      ? and(eq(budgets.id, id), eq(budgets.userId, userId))
+      : eq(budgets.id, id);
+    const [owned] = await db.select().from(budgets).where(ownerCheck);
+    if (!owned) return;
+
     const childCondition = userId
       ? and(eq(budgets.parentId, id), eq(budgets.userId, userId))
       : eq(budgets.parentId, id);

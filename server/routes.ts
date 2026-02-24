@@ -148,7 +148,8 @@ export async function registerRoutes(
     if (!(await verifyBudgetOwnership(existing.budgetId, userId))) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    const parsed = insertCategorySchema.partial().safeParse(req.body);
+    const { budgetId: _ignoredBudgetId, ...safeBody } = req.body;
+    const parsed = insertCategorySchema.partial().safeParse(safeBody);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const category = await storage.updateCategory(Number(req.params.id), parsed.data);
     if (!category) return res.status(404).json({ message: "Category not found" });
@@ -249,7 +250,8 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Forbidden" });
     }
 
-    const parsed = insertEntrySchema.partial().safeParse(req.body);
+    const { budgetId: _ignoredBudgetId, ...safeEntryBody } = req.body;
+    const parsed = insertEntrySchema.partial().safeParse(safeEntryBody);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
 
     const updated = await storage.updateEntry(Number(req.params.id), parsed.data);
