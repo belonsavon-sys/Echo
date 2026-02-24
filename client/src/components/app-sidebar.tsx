@@ -26,6 +26,7 @@ import { useTheme } from "@/components/theme-provider";
 import {
   Wallet, Plus, BarChart3, Calendar, Target, FlaskConical, History,
   Tag, FolderOpen, Folder, Trash2, Sun, Moon, LayoutDashboard, Copy, Star, Landmark,
+  ArrowLeftRight,
 } from "lucide-react";
 import { format } from "date-fns";
 import { CURRENCIES } from "@/lib/currency";
@@ -161,6 +162,7 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
     { id: "history", label: "History", icon: History },
     { id: "tags", label: "Manage Tags", icon: Tag },
     { id: "favorites", label: "Favorites", icon: Star },
+    { id: "compare", label: "Compare", icon: ArrowLeftRight },
   ];
 
   function renderBudgetItem(budget: Budget, indent = false) {

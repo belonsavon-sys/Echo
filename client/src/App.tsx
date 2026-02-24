@@ -18,6 +18,7 @@ import HistoryPage from "@/pages/history";
 import ManageTagsPage from "@/pages/manage-tags";
 import FavoritesPage from "@/pages/favorites";
 import NetWorthPage from "@/pages/net-worth";
+import ComparePage from "@/pages/compare";
 import CategoriesSection from "@/pages/categories";
 import { Wallet, Layers } from "lucide-react";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -106,6 +107,11 @@ function NetWorthView() {
   return <NetWorthPage />;
 }
 
+function CompareView() {
+  useDocumentTitle("Compare | Fudget");
+  return <ComparePage />;
+}
+
 function getPageTitle(location: string): string {
   if (location === "/reports") return "Reports";
   if (location === "/annual") return "Annual Overview";
@@ -115,6 +121,7 @@ function getPageTitle(location: string): string {
   if (location === "/history") return "History";
   if (location === "/tags") return "Manage Tags";
   if (location === "/favorites") return "Favorites";
+  if (location === "/compare") return "Compare";
   if (location.startsWith("/budget/")) return "Budget";
   return "Dashboard";
 }
@@ -143,6 +150,7 @@ function AppContent() {
     if (location === "/history") return "history";
     if (location === "/tags") return "tags";
     if (location === "/favorites") return "favorites";
+    if (location === "/compare") return "compare";
     if (location.startsWith("/budget/")) return "budget";
     return "home";
   })();
@@ -197,6 +205,7 @@ function AppContent() {
               <Route path="/history" component={HistoryView} />
               <Route path="/tags" component={TagsView} />
               <Route path="/favorites" component={FavoritesView} />
+              <Route path="/compare" component={CompareView} />
               <Route component={DashboardView} />
             </Switch>
           </main>
