@@ -36,6 +36,17 @@ const MONTH_NAMES = [
   "November",
   "December",
 ];
+const DEFAULT_BUDGET_CATEGORIES: Array<{ name: string; color: string }> = [
+  { name: "Shopping", color: "#f97316" },
+  { name: "Credit", color: "#ef4444" },
+  { name: "Income", color: "#10b981" },
+  { name: "Subscriptions", color: "#6366f1" },
+  { name: "Debt", color: "#b91c1c" },
+  { name: "Investing", color: "#059669" },
+  { name: "Food", color: "#f59e0b" },
+  { name: "Bill", color: "#2563eb" },
+  { name: "Other", color: "#6b7280" },
+];
 
 function generateRecurringDates(startDate: string, frequency: string, endDate: string): string[] {
   const dates: string[] = [];
@@ -87,6 +98,34 @@ function getMonthBoundaries(year: number, monthIndex: number): { startDate: stri
   };
 }
 
+async function ensureDefaultCategoriesForBudget(budget: Budget): Promise<void> {
+  if (budget.isFolder) return;
+
+  const existing = await storage.getCategories(budget.id);
+  const existingByName = new Set(
+    existing.map((category) => category.name.trim().toLowerCase()),
+  );
+  let nextSortOrder = existing.reduce(
+    (maxSortOrder, category) => Math.max(maxSortOrder, category.sortOrder),
+    -1,
+  ) + 1;
+
+  for (const template of DEFAULT_BUDGET_CATEGORIES) {
+    const normalized = template.name.trim().toLowerCase();
+    if (existingByName.has(normalized)) continue;
+    await storage.createCategory({
+      budgetId: budget.id,
+      name: template.name,
+      color: template.color,
+      icon: null,
+      budgetLimit: null,
+      sortOrder: nextSortOrder,
+    });
+    existingByName.add(normalized);
+    nextSortOrder += 1;
+  }
+}
+
 async function ensureYearFolderMonths(yearFolder: Budget, userId: string): Promise<Budget[]> {
   const year = getYearFromFolderName(yearFolder.name);
   if (year === null) return [];
@@ -120,6 +159,7 @@ async function ensureYearFolderMonths(yearFolder: Budget, userId: string): Promi
         currency: yearFolder.currency || "USD",
         userId,
       });
+      await ensureDefaultCategoriesForBudget(created);
       months.push(created);
       childBudgets.push(created);
       continue;
@@ -134,8 +174,11 @@ async function ensureYearFolderMonths(yearFolder: Budget, userId: string): Promi
 
     if (Object.keys(patch).length > 0) {
       const updated = await storage.updateBudget(existing.id, patch, userId);
-      months.push(updated ?? existing);
+      const resolved = updated ?? existing;
+      await ensureDefaultCategoriesForBudget(resolved);
+      months.push(resolved);
     } else {
+      await ensureDefaultCategoriesForBudget(existing);
       months.push(existing);
     }
   }
@@ -397,6 +440,8 @@ export async function registerRoutes(
       }, userId);
       if (normalized) budget = normalized;
       await ensureYearFolderMonths(budget, userId);
+    } else {
+      await ensureDefaultCategoriesForBudget(budget);
     }
     res.status(201).json(budget);
   });
@@ -490,10 +535,13 @@ export async function registerRoutes(
 
   app.get("/api/budgets/:budgetId/categories", isAuthenticated, async (req, res) => {
     const userId = (req as any).user?.claims?.sub;
-    if (!(await verifyBudgetOwnership(Number(req.params.budgetId), userId))) {
+    const budgetId = Number(req.params.budgetId);
+    const budget = await storage.getBudget(budgetId, userId);
+    if (!budget) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    const data = await storage.getCategories(Number(req.params.budgetId));
+    await ensureDefaultCategoriesForBudget(budget);
+    const data = await storage.getCategories(budgetId);
     res.json(data);
   });
 
