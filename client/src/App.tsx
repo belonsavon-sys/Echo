@@ -142,22 +142,23 @@ function AppContent() {
   const [activeBudgetId, setActiveBudgetId] = useState<number | null>(null);
   const [, setLocation] = useLocation();
   const [location] = useLocation();
+  const locationPath = location.split("?")[0];
 
   const activeView = (() => {
-    if (location === "/reports") return "reports";
-    if (location === "/annual") return "annual";
-    if (location === "/goals") return "goals";
-    if (location === "/networth") return "networth";
-    if (location === "/whatif") return "whatif";
-    if (location === "/history") return "history";
-    if (location === "/tags") return "tags";
-    if (location === "/favorites") return "favorites";
-    if (location === "/compare") return "compare";
-    if (location.startsWith("/budget/")) return "budget";
+    if (locationPath === "/reports") return "reports";
+    if (locationPath === "/annual") return "annual";
+    if (locationPath === "/goals") return "goals";
+    if (locationPath === "/networth") return "networth";
+    if (locationPath === "/whatif") return "whatif";
+    if (locationPath === "/history") return "history";
+    if (locationPath === "/tags") return "tags";
+    if (locationPath === "/favorites") return "favorites";
+    if (locationPath === "/compare") return "compare";
+    if (locationPath.startsWith("/budget/")) return "budget";
     return "home";
   })();
 
-  const pageTitle = getPageTitle(location);
+  const pageTitle = getPageTitle(locationPath);
 
   function handleSelectBudget(id: number) {
     setActiveBudgetId(id);
@@ -194,7 +195,7 @@ function AppContent() {
             <span className="text-sm font-medium text-muted-foreground" data-testid="text-page-title">{pageTitle}</span>
           </header>
           <main className="flex-1 overflow-auto">
-            <Switch>
+            <Switch location={locationPath}>
               <Route path="/" component={DashboardView} />
               <Route path="/budget/:id">
                 {(params) => <BudgetRouteHandler id={params.id} activeBudgetId={activeBudgetId} setActiveBudgetId={setActiveBudgetId} />}

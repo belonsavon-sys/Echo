@@ -21,12 +21,32 @@ export function getCurrencySymbol(currency: string): string {
   return found ? found.symbol : currency;
 }
 
+export function formatNumber(
+  value: number | string,
+  options: Intl.NumberFormatOptions = {},
+): string {
+  const num = typeof value === "string" ? parseFloat(value) : value;
+  const formatter = new Intl.NumberFormat("en-US", {
+    useGrouping: true,
+    ...options,
+  });
+  if (isNaN(num)) {
+    return formatter.format(0);
+  }
+  return formatter.format(num);
+}
+
 export function formatCurrency(amount: number | string, currency: string): string {
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  if (isNaN(num)) return `${getCurrencySymbol(currency)}0.00`;
   const symbol = getCurrencySymbol(currency);
   const decimals = currency === "JPY" || currency === "KRW" ? 0 : 2;
-  const formatted = Math.abs(num).toFixed(decimals);
+  if (isNaN(num)) {
+    return `${symbol}${formatNumber(0, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+  }
+  const formatted = formatNumber(Math.abs(num), {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
   const sign = num < 0 ? "-" : "";
   return `${sign}${symbol}${formatted}`;
 }

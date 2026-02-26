@@ -1,8 +1,18 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, real, timestamp, date } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, real, timestamp, date, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
+
+export type NavigationPreferences = {
+  hiddenToolIds?: string[];
+  moreExpanded?: boolean;
+};
+
+export type DashboardPreferences = {
+  cardOrder?: string[];
+  hiddenCards?: string[];
+};
 
 export const budgets = pgTable("budgets", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -18,7 +28,7 @@ export const budgets = pgTable("budgets", {
   parentId: integer("parent_id"),
   isFolder: boolean("is_folder").notNull().default(false),
   currency: text("currency").notNull().default("USD"),
-  userId: text("user_id"),
+  userId: text("user_id").notNull(),
 });
 
 export const categories = pgTable("categories", {
@@ -35,7 +45,7 @@ export const tags = pgTable("tags", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
   color: text("color").notNull().default("#8b5cf6"),
-  userId: text("user_id"),
+  userId: text("user_id").notNull(),
 });
 
 export const entries = pgTable("entries", {
@@ -75,7 +85,7 @@ export const savingsGoals = pgTable("savings_goals", {
   deadline: date("deadline"),
   color: text("color").notNull().default("#10b981"),
   budgetId: integer("budget_id"),
-  userId: text("user_id"),
+  userId: text("user_id").notNull(),
 });
 
 export const favorites = pgTable("favorites", {
@@ -86,7 +96,7 @@ export const favorites = pgTable("favorites", {
   note: text("note"),
   categoryId: integer("category_id"),
   tagIds: integer("tag_ids").array(),
-  userId: text("user_id"),
+  userId: text("user_id").notNull(),
 });
 
 export const netWorthAccounts = pgTable("net_worth_accounts", {
@@ -95,7 +105,36 @@ export const netWorthAccounts = pgTable("net_worth_accounts", {
   balance: real("balance").notNull(),
   currency: text("currency").notNull().default("USD"),
   accountType: text("account_type").notNull(),
-  userId: text("user_id"),
+  userId: text("user_id").notNull(),
+});
+
+export const userPreferences = pgTable("user_preferences", {
+  userId: text("user_id").primaryKey(),
+  navigation: jsonb("navigation")
+    .$type<NavigationPreferences>()
+    .notNull()
+    .default(sql`'{}'::jsonb`),
+  dashboard: jsonb("dashboard")
+    .$type<DashboardPreferences>()
+    .notNull()
+    .default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const dashboardWatchlists = pgTable("dashboard_watchlists", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  budgetId: integer("budget_id"),
+  categoryId: integer("category_id"),
+  targetAmount: real("target_amount").notNull().default(0),
+  monthKeyScope: text("month_key_scope").notNull().default("current"),
+  fixedMonthKey: text("fixed_month_key"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 export const budgetsRelations = relations(budgets, ({ many }) => ({
@@ -103,10 +142,12 @@ export const budgetsRelations = relations(budgets, ({ many }) => ({
   categories: many(categories),
   savingsGoals: many(savingsGoals),
   history: many(entryHistory),
+  watchlists: many(dashboardWatchlists),
 }));
 
-export const categoriesRelations = relations(categories, ({ one }) => ({
+export const categoriesRelations = relations(categories, ({ one, many }) => ({
   budget: one(budgets, { fields: [categories.budgetId], references: [budgets.id] }),
+  watchlists: many(dashboardWatchlists),
 }));
 
 export const entriesRelations = relations(entries, ({ one }) => ({
@@ -123,14 +164,21 @@ export const savingsGoalsRelations = relations(savingsGoals, ({ one }) => ({
   budget: one(budgets, { fields: [savingsGoals.budgetId], references: [budgets.id] }),
 }));
 
-export const insertBudgetSchema = createInsertSchema(budgets).omit({ id: true });
-export const insertCategorySchema = createInsertSchema(categories).omit({ id: true });
-export const insertTagSchema = createInsertSchema(tags).omit({ id: true });
-export const insertEntrySchema = createInsertSchema(entries).omit({ id: true });
-export const insertEntryHistorySchema = createInsertSchema(entryHistory).omit({ id: true });
-export const insertSavingsGoalSchema = createInsertSchema(savingsGoals).omit({ id: true });
-export const insertFavoriteSchema = createInsertSchema(favorites).omit({ id: true });
-export const insertNetWorthAccountSchema = createInsertSchema(netWorthAccounts).omit({ id: true });
+export const dashboardWatchlistsRelations = relations(dashboardWatchlists, ({ one }) => ({
+  budget: one(budgets, { fields: [dashboardWatchlists.budgetId], references: [budgets.id] }),
+  category: one(categories, { fields: [dashboardWatchlists.categoryId], references: [categories.id] }),
+}));
+
+export const insertBudgetSchema = createInsertSchema(budgets);
+export const insertCategorySchema = createInsertSchema(categories);
+export const insertTagSchema = createInsertSchema(tags);
+export const insertEntrySchema = createInsertSchema(entries);
+export const insertEntryHistorySchema = createInsertSchema(entryHistory);
+export const insertSavingsGoalSchema = createInsertSchema(savingsGoals);
+export const insertFavoriteSchema = createInsertSchema(favorites);
+export const insertNetWorthAccountSchema = createInsertSchema(netWorthAccounts);
+export const insertUserPreferencesSchema = createInsertSchema(userPreferences);
+export const insertDashboardWatchlistSchema = createInsertSchema(dashboardWatchlists);
 
 export type Budget = typeof budgets.$inferSelect;
 export type InsertBudget = z.infer<typeof insertBudgetSchema>;
@@ -148,5 +196,9 @@ export type Favorite = typeof favorites.$inferSelect;
 export type InsertFavorite = z.infer<typeof insertFavoriteSchema>;
 export type NetWorthAccount = typeof netWorthAccounts.$inferSelect;
 export type InsertNetWorthAccount = z.infer<typeof insertNetWorthAccountSchema>;
+export type UserPreferences = typeof userPreferences.$inferSelect;
+export type InsertUserPreferences = z.infer<typeof insertUserPreferencesSchema>;
+export type DashboardWatchlist = typeof dashboardWatchlists.$inferSelect;
+export type InsertDashboardWatchlist = z.infer<typeof insertDashboardWatchlistSchema>;
 
 export * from "./models/auth";

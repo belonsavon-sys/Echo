@@ -1,16 +1,19 @@
+import { useState } from "react";
 import { Wallet, Globe, BarChart3, Landmark, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useAuth } from "@/hooks/use-auth";
 
 const features = [
   {
     icon: Globe,
     title: "Multi-Currency",
-    description: "Track budgets in any currency with real-time conversion.",
+    description: "Track budgets in any currency with clear totals and reports.",
   },
   {
     icon: BarChart3,
     title: "Visual Reports",
-    description: "See where your money goes with clear charts and breakdowns.",
+    description: "See where your money goes with charts and category breakdowns.",
   },
   {
     icon: Landmark,
@@ -25,6 +28,52 @@ const features = [
 ];
 
 export default function LandingPage() {
+  const {
+    signInWithPassword,
+    signUpWithPassword,
+    sendMagicLink,
+    isSigningIn,
+    isSigningUp,
+    isSendingMagicLink,
+  } = useAuth();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSignIn() {
+    setError(null);
+    setNotice(null);
+    try {
+      await signInWithPassword({ email, password });
+    } catch (err: any) {
+      setError(err?.message || "Unable to sign in");
+    }
+  }
+
+  async function handleSignUp() {
+    setError(null);
+    setNotice(null);
+    try {
+      await signUpWithPassword({ email, password });
+      setNotice("Account created. If email confirmation is enabled, check your inbox.");
+    } catch (err: any) {
+      setError(err?.message || "Unable to create account");
+    }
+  }
+
+  async function handleMagicLink() {
+    setError(null);
+    setNotice(null);
+    try {
+      await sendMagicLink({ email });
+      setNotice("Magic link sent. Open your email and tap the sign-in link.");
+    } catch (err: any) {
+      setError(err?.message || "Unable to send magic link");
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col lg:flex-row">
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 lg:py-0 animate-in fade-in duration-700">
@@ -35,27 +84,60 @@ export default function LandingPage() {
           </div>
 
           <div className="space-y-3">
-            <h1
-              className="text-3xl sm:text-4xl font-bold tracking-tight"
-              data-testid="text-hero-title"
-            >
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight" data-testid="text-hero-title">
               Your money, simplified.
             </h1>
             <p className="text-muted-foreground text-base leading-relaxed">
-              A minimalist budget tracker that helps you stay on top of your
-              finances without the clutter.
+              Create your own account and keep your budgets private, clean, and easy to manage.
             </p>
           </div>
 
-          <div className="pt-2">
-            <a href="/api/login">
-              <Button size="lg" className="w-full sm:w-auto" data-testid="button-login">
-                Get Started
+          <div className="space-y-3 pt-2">
+            <Input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              data-testid="input-auth-email"
+            />
+            <Input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              data-testid="input-auth-password"
+            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Button
+                size="lg"
+                onClick={handleSignIn}
+                disabled={!email || !password || isSigningIn}
+                data-testid="button-signin-password"
+              >
+                {isSigningIn ? "Signing in..." : "Sign In"}
               </Button>
-            </a>
-            <p className="text-xs text-muted-foreground mt-3">
-              Free forever. No credit card required.
-            </p>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={handleSignUp}
+                disabled={!email || !password || isSigningUp}
+                data-testid="button-signup-password"
+              >
+                {isSigningUp ? "Creating..." : "Create Account"}
+              </Button>
+            </div>
+            <Button
+              size="lg"
+              variant="ghost"
+              onClick={handleMagicLink}
+              disabled={!email || isSendingMagicLink}
+              className="w-full"
+              data-testid="button-send-magic-link"
+            >
+              {isSendingMagicLink ? "Sending..." : "Email Me a Magic Link"}
+            </Button>
+            {notice && <p className="text-xs text-emerald-600 dark:text-emerald-400">{notice}</p>}
+            {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
           </div>
         </div>
       </div>
@@ -63,18 +145,13 @@ export default function LandingPage() {
       <div className="flex-1 bg-muted/40 flex items-center justify-center px-6 py-12 lg:py-0 animate-in fade-in duration-1000 delay-200">
         <div className="max-w-sm w-full space-y-6">
           {features.map((feature) => (
-            <div
-              key={feature.title}
-              className="flex items-start gap-3"
-            >
+            <div key={feature.title} className="flex items-start gap-3">
               <div className="mt-0.5 rounded-md bg-primary/10 p-2 shrink-0">
                 <feature.icon className="w-4 h-4 text-primary" />
               </div>
               <div>
                 <h3 className="text-sm font-medium">{feature.title}</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
-                  {feature.description}
-                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">{feature.description}</p>
               </div>
             </div>
           ))}

@@ -9,7 +9,14 @@ export function registerAuthRoutes(app: Express): void {
     try {
       const userId = req.user.claims.sub;
       const user = await authStorage.getUser(userId);
-      res.json(user);
+      if (user) return res.json(user);
+      return res.json({
+        id: userId,
+        email: req.user.claims.email || null,
+        firstName: req.user.claims.first_name || null,
+        lastName: req.user.claims.last_name || null,
+        profileImageUrl: req.user.claims.profile_image_url || null,
+      });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });

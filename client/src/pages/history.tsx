@@ -8,12 +8,19 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { format } from "date-fns";
 import { History, Plus, Edit2, Trash2, Undo2, RotateCcw, ArrowRight } from "lucide-react";
+import { formatCurrency } from "@/lib/currency";
 
 export default function HistoryPage() {
   const { toast } = useToast();
   const [selectedBudgetId, setSelectedBudgetId] = useState<string>("");
   const { data: budgets = [] } = useQuery<Budget[]>({ queryKey: ["/api/budgets"] });
-  const budgetId = selectedBudgetId ? parseInt(selectedBudgetId) : budgets[0]?.id;
+  const selectableBudgets = budgets.filter((b) => !b.isFolder);
+  const selectedId = selectedBudgetId ? parseInt(selectedBudgetId) : NaN;
+  const budgetId =
+    Number.isInteger(selectedId) && selectableBudgets.some((b) => b.id === selectedId)
+      ? selectedId
+      : selectableBudgets[0]?.id;
+  const budgetCurrency = selectableBudgets.find((b) => b.id === budgetId)?.currency || "USD";
 
   const { data: history = [] } = useQuery<EntryHistory[]>({
     queryKey: ["/api/budgets", budgetId, "history"],
@@ -89,7 +96,7 @@ export default function HistoryPage() {
             <SelectValue placeholder="Select budget" />
           </SelectTrigger>
           <SelectContent>
-            {budgets.map(b => (
+            {selectableBudgets.map(b => (
               <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
             ))}
           </SelectContent>
@@ -108,7 +115,7 @@ export default function HistoryPage() {
             const prevData = parseEntryData(record.previousData);
             const newData = parseEntryData(record.newData);
             const entryName = newData?.name || prevData?.name || `Entry #${record.entryId}`;
-            const amount = newData?.amount || prevData?.amount;
+            const amount = newData?.amount ?? prevData?.amount;
 
             return (
               <div key={record.id} className="bg-card rounded-md border border-card-border px-3 sm:px-4 py-2.5 sm:py-3" data-testid={`history-record-${record.id}`}>
@@ -143,7 +150,7 @@ export default function HistoryPage() {
                   <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                     {prevData.amount !== newData.amount && (
                       <p className="flex items-center gap-1 flex-wrap">
-                        Amount: ${prevData.amount?.toFixed(2)} <ArrowRight className="w-3 h-3 shrink-0" /> ${newData.amount?.toFixed(2)}
+                        Amount: {formatCurrency(prevData.amount ?? 0, budgetCurrency)} <ArrowRight className="w-3 h-3 shrink-0" /> {formatCurrency(newData.amount ?? 0, budgetCurrency)}
                       </p>
                     )}
                     {prevData.name !== newData.name && (
@@ -157,9 +164,9 @@ export default function HistoryPage() {
                   </div>
                 )}
 
-                {amount && (
+                {amount !== undefined && amount !== null && (
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Amount: ${amount.toFixed(2)}
+                    Amount: {formatCurrency(amount, budgetCurrency)}
                   </p>
                 )}
               </div>

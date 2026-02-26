@@ -11,7 +11,7 @@ import {
   subMonths, subYears, getDaysInMonth, differenceInDays,
 } from "date-fns";
 import { Card } from "@/components/ui/card";
-import { formatCurrency } from "@/lib/currency";
+import { formatCurrency, formatNumber } from "@/lib/currency";
 import { TrendingUp, TrendingDown, Minus, DollarSign, Calendar, BarChart3, Target } from "lucide-react";
 
 const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#f97316"];
@@ -20,7 +20,7 @@ function pctChange(current: number, previous: number): { value: number; label: s
   if (previous === 0 && current === 0) return { value: 0, label: "No change" };
   if (previous === 0) return { value: 100, label: "New spending" };
   const pct = ((current - previous) / previous) * 100;
-  return { value: pct, label: `${Math.abs(pct).toFixed(0)}%` };
+  return { value: pct, label: `${formatNumber(Math.abs(pct), { maximumFractionDigits: 0 })}%` };
 }
 
 function ChangeIndicator({ current, previous, label }: { current: number; previous: number; label: string }) {
@@ -43,12 +43,14 @@ function ChangeIndicator({ current, previous, label }: { current: number; previo
 export default function ReportsPage() {
   const [selectedBudgetId, setSelectedBudgetId] = useState<string>("all");
   const { data: budgets = [] } = useQuery<Budget[]>({ queryKey: ["/api/budgets"] });
+  const selectableBudgets = budgets.filter((b) => !b.isFolder);
 
   const selectedBudgetIds = useMemo(() => {
-    if (selectedBudgetId === "all") return budgets.map(b => b.id);
+    if (selectedBudgetId === "all") return selectableBudgets.map(b => b.id);
     const id = parseInt(selectedBudgetId);
-    return isNaN(id) ? [] : [id];
-  }, [selectedBudgetId, budgets]);
+    if (isNaN(id)) return [];
+    return selectableBudgets.some((b) => b.id === id) ? [id] : [];
+  }, [selectedBudgetId, selectableBudgets]);
 
   const entriesResults = useQueries({
     queries: selectedBudgetIds.map(id => ({
@@ -72,13 +74,19 @@ export default function ReportsPage() {
     return categoriesResults.flatMap(q => (q.data as Category[]) || []);
   }, [categoriesResults]);
 
+  const budgetNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    selectableBudgets.forEach((budget) => map.set(budget.id, budget.name));
+    return map;
+  }, [selectableBudgets]);
+
   const currency = useMemo(() => {
     if (selectedBudgetId !== "all") {
-      const b = budgets.find(b => b.id === parseInt(selectedBudgetId));
+      const b = selectableBudgets.find(b => b.id === parseInt(selectedBudgetId));
       return b?.currency || "USD";
     }
-    return budgets[0]?.currency || "USD";
-  }, [selectedBudgetId, budgets]);
+    return selectableBudgets[0]?.currency || "USD";
+  }, [selectedBudgetId, selectableBudgets]);
 
   const now = new Date();
   const thisMonthStart = startOfMonth(now);
@@ -127,43 +135,151 @@ export default function ReportsPage() {
   const predictedExpenses = dailyAvgExpense * daysInMonth;
   const predictedIncome = dailyAvgIncome * daysInMonth;
 
+  const predictionBudgetIds = useMemo(() => {
+    if (selectedBudgetId !== "all") {
+      const id = parseInt(selectedBudgetId);
+      return new Set<number>(Number.isInteger(id) ? [id] : []);
+    }
+
+    const activeInCurrentMonth = selectableBudgets.filter((budget) => {
+      const start = parseISO(budget.startDate);
+      const end = budget.endDate ? parseISO(budget.endDate) : null;
+      return start <= thisMonthEnd && (!end || end >= thisMonthStart);
+    });
+    return new Set<number>(activeInCurrentMonth.map((budget) => budget.id));
+  }, [selectedBudgetId, selectableBudgets, thisMonthStart, thisMonthEnd]);
+
   const categoryPredictions = useMemo(() => {
-    const expenseEntries = thisMonthEntries.filter(e => e.type === "expense");
+    const scopedExpenseEntries = thisMonthEntries.filter(
+      (entry) => entry.type === "expense" && predictionBudgetIds.has(entry.budgetId),
+    );
     return allCategories
-      .filter(cat => cat.budgetLimit && cat.budgetLimit > 0)
+      .filter((category) => predictionBudgetIds.has(category.budgetId) && !!category.budgetLimit && category.budgetLimit > 0)
       .map(cat => {
-        const spent = expenseEntries.filter(e => e.categoryId === cat.id).reduce((s, e) => s + e.amount, 0);
+        const spent = scopedExpenseEntries.filter(entry => entry.categoryId === cat.id).reduce((sum, entry) => sum + entry.amount, 0);
+        if (spent <= 0) return null;
         const predicted = (spent / daysSoFar) * daysInMonth;
         const limit = cat.budgetLimit!;
         const status = predicted <= limit * 0.9 ? "under" : predicted <= limit * 1.1 ? "on-track" : "over";
-        return { name: cat.name, spent, predicted, limit, status, color: cat.color };
+        const label =
+          selectedBudgetId === "all"
+            ? `${cat.name} (${budgetNameById.get(cat.budgetId) || "Budget"})`
+            : cat.name;
+        return { name: label, spent, predicted, limit, status, color: cat.color };
       })
-      .filter(c => c.spent > 0 || c.limit > 0);
-  }, [thisMonthEntries, allCategories, daysSoFar, daysInMonth]);
+      .filter((category): category is NonNullable<typeof category> => category !== null)
+      .sort((a, b) => b.predicted - a.predicted);
+  }, [thisMonthEntries, allCategories, predictionBudgetIds, daysSoFar, daysInMonth, selectedBudgetId, budgetNameById]);
 
   const expenseEntries = allEntries.filter(e => e.type === "expense");
 
   const categorySpending = useMemo(() => {
-    const spending = allCategories.map(cat => {
-      const total = expenseEntries
-        .filter(e => e.categoryId === cat.id)
-        .reduce((sum, e) => sum + e.amount, 0);
-      return { name: cat.name, value: total, color: cat.color };
-    }).filter(c => c.value > 0);
-    const uncategorized = expenseEntries
-      .filter(e => !e.categoryId)
-      .reduce((sum, e) => sum + e.amount, 0);
+    const thisMonthExpenseEntries = thisMonthEntries.filter((entry) => entry.type === "expense");
+    const categoryById = new Map<number, Category>();
+    allCategories.forEach((category) => {
+      categoryById.set(category.id, category);
+    });
+
+    const aggregated = new Map<string, { name: string; value: number; color: string }>();
+    for (const entry of thisMonthExpenseEntries) {
+      if (!entry.categoryId) continue;
+      const category = categoryById.get(entry.categoryId);
+      if (!category) continue;
+
+      const key = selectedBudgetId === "all"
+        ? category.name.trim().toLowerCase()
+        : String(category.id);
+      const existing = aggregated.get(key);
+      if (existing) {
+        existing.value += entry.amount;
+      } else {
+        aggregated.set(key, {
+          name: category.name,
+          value: entry.amount,
+          color: category.color || COLORS[aggregated.size % COLORS.length],
+        });
+      }
+    }
+
+    const spending = Array.from(aggregated.values())
+      .filter((category) => category.value > 0)
+      .sort((a, b) => b.value - a.value);
+
+    const uncategorized = thisMonthExpenseEntries
+      .filter((entry) => !entry.categoryId)
+      .reduce((sum, entry) => sum + entry.amount, 0);
     if (uncategorized > 0) {
       spending.push({ name: "Uncategorized", value: uncategorized, color: "#94a3b8" });
     }
     return spending;
-  }, [expenseEntries, allCategories]);
+  }, [thisMonthEntries, allCategories, selectedBudgetId]);
 
-  const topExpenses = useMemo(() => {
-    return [...expenseEntries]
-      .sort((a, b) => b.amount - a.amount)
+  const topExpenseSpenders = useMemo(() => {
+    const categoryById = new Map<number, string>();
+    allCategories.forEach((category) => {
+      categoryById.set(category.id, category.name);
+    });
+
+    const byName = new Map<
+      string,
+      {
+        name: string;
+        total: number;
+        count: number;
+        latestDate: string;
+        byCategory: Map<string, number>;
+      }
+    >();
+
+    for (const entry of expenseEntries) {
+      const key = entry.name.trim().toLowerCase();
+      if (!key) continue;
+
+      const existing = byName.get(key);
+      if (!existing) {
+        const byCategory = new Map<string, number>();
+        const categoryName = entry.categoryId ? categoryById.get(entry.categoryId) || "Uncategorized" : "Uncategorized";
+        byCategory.set(categoryName, entry.amount);
+        byName.set(key, {
+          name: entry.name.trim(),
+          total: entry.amount,
+          count: 1,
+          latestDate: entry.date,
+          byCategory,
+        });
+      } else {
+        existing.total += entry.amount;
+        existing.count += 1;
+        if (entry.date > existing.latestDate) {
+          existing.latestDate = entry.date;
+        }
+        const categoryName = entry.categoryId ? categoryById.get(entry.categoryId) || "Uncategorized" : "Uncategorized";
+        existing.byCategory.set(categoryName, (existing.byCategory.get(categoryName) || 0) + entry.amount);
+      }
+    }
+
+    return Array.from(byName.values())
+      .map((item) => {
+        let primaryCategory = "Uncategorized";
+        let primaryCategoryAmount = 0;
+        for (const [categoryName, amount] of item.byCategory.entries()) {
+          if (amount > primaryCategoryAmount) {
+            primaryCategory = categoryName;
+            primaryCategoryAmount = amount;
+          }
+        }
+
+        return {
+          name: item.name,
+          total: item.total,
+          count: item.count,
+          latestDate: item.latestDate,
+          primaryCategory,
+        };
+      })
+      .sort((a, b) => b.total - a.total)
       .slice(0, 5);
-  }, [expenseEntries]);
+  }, [expenseEntries, allCategories]);
 
   const last6Months = eachMonthOfInterval({
     start: subMonths(now, 5),
@@ -181,7 +297,7 @@ export default function ReportsPage() {
     });
   }, [allEntries]);
 
-  if (budgets.length === 0) {
+  if (selectableBudgets.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-muted-foreground">Create a budget first to see reports.</p>
@@ -199,7 +315,7 @@ export default function ReportsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Budgets</SelectItem>
-            {budgets.map(b => (
+            {selectableBudgets.map(b => (
               <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
             ))}
           </SelectContent>
@@ -371,7 +487,7 @@ export default function ReportsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <Card className="p-3 sm:p-4" data-testid="section-category-breakdown">
-          <h2 className="text-sm font-semibold mb-3 sm:mb-4">Category Breakdown</h2>
+          <h2 className="text-sm font-semibold mb-3 sm:mb-4">Category Breakdown (This Month)</h2>
           {categorySpending.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No expense data yet</p>
           ) : (
@@ -386,7 +502,7 @@ export default function ReportsPage() {
                     outerRadius={85}
                     paddingAngle={2}
                     dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name} ${formatNumber((percent || 0) * 100, { maximumFractionDigits: 0 })}%`}
                   >
                     {categorySpending.map((entry, index) => (
                       <Cell key={index} fill={entry.color || COLORS[index % COLORS.length]} />
@@ -400,26 +516,25 @@ export default function ReportsPage() {
         </Card>
 
         <Card className="p-3 sm:p-4" data-testid="section-top-expenses">
-          <h2 className="text-sm font-semibold mb-3 sm:mb-4">Top 5 Expenses</h2>
-          {topExpenses.length === 0 ? (
+          <h2 className="text-sm font-semibold mb-3 sm:mb-4">Top 5 Biggest Spenders</h2>
+          {topExpenseSpenders.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No expenses yet</p>
           ) : (
             <div className="space-y-2">
-              {topExpenses.map((entry, i) => {
-                const cat = allCategories.find(c => c.id === entry.categoryId);
+              {topExpenseSpenders.map((spender, i) => {
                 return (
-                  <div key={entry.id} className="flex items-center justify-between gap-2 py-1.5 border-b last:border-0 flex-wrap" data-testid={`top-expense-${i}`}>
+                  <div key={`${spender.name}-${i}`} className="flex items-center justify-between gap-2 py-1.5 border-b last:border-0 flex-wrap" data-testid={`top-expense-${i}`}>
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xs font-semibold text-muted-foreground w-5 shrink-0">{i + 1}.</span>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{entry.name}</p>
+                        <p className="text-sm font-medium truncate">{spender.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {cat?.name || "Uncategorized"} &middot; {format(parseISO(entry.date), "MMM d, yyyy")}
+                          {spender.primaryCategory} &middot; {spender.count} transaction{spender.count === 1 ? "" : "s"} &middot; last {format(parseISO(spender.latestDate), "MMM d, yyyy")}
                         </p>
                       </div>
                     </div>
                     <span className="text-sm font-semibold text-red-600 dark:text-red-400 shrink-0">
-                      {formatCurrency(entry.amount, currency)}
+                      {formatCurrency(spender.total, currency)}
                     </span>
                   </div>
                 );

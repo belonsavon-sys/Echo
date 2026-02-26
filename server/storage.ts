@@ -7,7 +7,10 @@ import {
   type SavingsGoal, type InsertSavingsGoal,
   type Favorite, type InsertFavorite,
   type NetWorthAccount, type InsertNetWorthAccount,
+  type UserPreferences, type InsertUserPreferences,
+  type DashboardWatchlist, type InsertDashboardWatchlist,
   budgets, categories, tags, entries, entryHistory, savingsGoals, favorites, netWorthAccounts,
+  userPreferences, dashboardWatchlists,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc } from "drizzle-orm";
@@ -54,6 +57,15 @@ export interface IStorage {
   createNetWorthAccount(account: InsertNetWorthAccount): Promise<NetWorthAccount>;
   updateNetWorthAccount(id: number, account: Partial<InsertNetWorthAccount>, userId: string): Promise<NetWorthAccount | undefined>;
   deleteNetWorthAccount(id: number, userId: string): Promise<void>;
+
+  getUserPreferences(userId: string): Promise<UserPreferences | undefined>;
+  upsertUserPreferences(userId: string, values: Partial<InsertUserPreferences>): Promise<UserPreferences>;
+
+  getDashboardWatchlists(userId: string): Promise<DashboardWatchlist[]>;
+  getDashboardWatchlist(id: number, userId: string): Promise<DashboardWatchlist | undefined>;
+  createDashboardWatchlist(watchlist: InsertDashboardWatchlist): Promise<DashboardWatchlist>;
+  updateDashboardWatchlist(id: number, watchlist: Partial<InsertDashboardWatchlist>, userId: string): Promise<DashboardWatchlist | undefined>;
+  deleteDashboardWatchlist(id: number, userId: string): Promise<void>;
 
   cloneBudget(sourceId: number, newName: string, parentId?: number, userId?: string): Promise<Budget>;
 }
@@ -107,6 +119,8 @@ export class DatabaseStorage implements IStorage {
     await db.delete(entries).where(eq(entries.budgetId, id));
     await db.delete(categories).where(eq(categories.budgetId, id));
     await db.delete(savingsGoals).where(eq(savingsGoals.budgetId, id));
+    await db.delete(dashboardWatchlists).where(eq(dashboardWatchlists.budgetId, id));
+
     const deleteCondition = userId
       ? and(eq(budgets.id, id), eq(budgets.userId, userId))
       : eq(budgets.id, id);
@@ -134,6 +148,7 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCategory(id: number): Promise<void> {
     await db.update(entries).set({ categoryId: null }).where(eq(entries.categoryId, id));
+    await db.update(dashboardWatchlists).set({ categoryId: null }).where(eq(dashboardWatchlists.categoryId, id));
     await db.delete(categories).where(eq(categories.id, id));
   }
 
@@ -296,6 +311,68 @@ export class DatabaseStorage implements IStorage {
     } else {
       await db.delete(netWorthAccounts).where(eq(netWorthAccounts.id, id));
     }
+  }
+
+  async getUserPreferences(userId: string): Promise<UserPreferences | undefined> {
+    const [preferences] = await db
+      .select()
+      .from(userPreferences)
+      .where(eq(userPreferences.userId, userId));
+    return preferences;
+  }
+
+  async upsertUserPreferences(userId: string, values: Partial<InsertUserPreferences>): Promise<UserPreferences> {
+    const [saved] = await db
+      .insert(userPreferences)
+      .values({
+        userId,
+        navigation: (values.navigation || {}) as any,
+        dashboard: (values.dashboard || {}) as any,
+      })
+      .onConflictDoUpdate({
+        target: userPreferences.userId,
+        set: {
+          ...(values.navigation !== undefined ? { navigation: values.navigation as any } : {}),
+          ...(values.dashboard !== undefined ? { dashboard: values.dashboard as any } : {}),
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return saved;
+  }
+
+  async getDashboardWatchlists(userId: string): Promise<DashboardWatchlist[]> {
+    return db
+      .select()
+      .from(dashboardWatchlists)
+      .where(eq(dashboardWatchlists.userId, userId))
+      .orderBy(asc(dashboardWatchlists.sortOrder), asc(dashboardWatchlists.id));
+  }
+
+  async getDashboardWatchlist(id: number, userId: string): Promise<DashboardWatchlist | undefined> {
+    const [watchlist] = await db
+      .select()
+      .from(dashboardWatchlists)
+      .where(and(eq(dashboardWatchlists.id, id), eq(dashboardWatchlists.userId, userId)));
+    return watchlist;
+  }
+
+  async createDashboardWatchlist(watchlist: InsertDashboardWatchlist): Promise<DashboardWatchlist> {
+    const [created] = await db.insert(dashboardWatchlists).values(watchlist).returning();
+    return created;
+  }
+
+  async updateDashboardWatchlist(id: number, watchlist: Partial<InsertDashboardWatchlist>, userId: string): Promise<DashboardWatchlist | undefined> {
+    const [updated] = await db
+      .update(dashboardWatchlists)
+      .set({ ...watchlist, updatedAt: new Date() })
+      .where(and(eq(dashboardWatchlists.id, id), eq(dashboardWatchlists.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteDashboardWatchlist(id: number, userId: string): Promise<void> {
+    await db.delete(dashboardWatchlists).where(and(eq(dashboardWatchlists.id, id), eq(dashboardWatchlists.userId, userId)));
   }
 
   async cloneBudget(sourceId: number, newName: string, parentId?: number, userId?: string): Promise<Budget> {

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ReactNode } from "react";
+import { useState, useRef, useEffect, useMemo, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -81,6 +81,15 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
   const { data: tagsData = [] } = useQuery<Tag[]>({ queryKey: ["/api/tags"] });
   const { data: favoritesData = [] } = useQuery<Favorite[]>({ queryKey: ["/api/favorites"] });
 
+  function invalidateEntriesAcrossBudgets() {
+    queryClient.invalidateQueries({
+      predicate: (query) =>
+        Array.isArray(query.queryKey) &&
+        query.queryKey[0] === "/api/budgets" &&
+        query.queryKey[2] === "entries",
+    });
+  }
+
   const quickAddFromFavorite = useMutation({
     mutationFn: async (fav: Favorite) => {
       const data = {
@@ -104,7 +113,7 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/budgets", budgetId, "entries"] });
+      invalidateEntriesAcrossBudgets();
       toast({ title: "Entry added from favorite" });
     },
   });
@@ -115,6 +124,20 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
 
   const incomeEntries = filteredEntries.filter(e => e.type === "income");
   const expenseEntries = filteredEntries.filter(e => e.type === "expense");
+  const timelineEntries = [...filteredEntries].sort((a, b) => {
+    const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+    if (dateDiff !== 0) return dateDiff;
+    return a.id - b.id;
+  });
+  const runningBalanceByEntryId = useMemo(() => {
+    let running = 0;
+    const next = new Map<number, number>();
+    for (const entry of timelineEntries) {
+      running += entry.type === "income" ? entry.amount : -entry.amount;
+      next.set(entry.id, running);
+    }
+    return next;
+  }, [timelineEntries]);
 
   const totalIncome = incomeEntries.reduce((sum, e) => sum + e.amount, 0);
   const totalExpenses = expenseEntries.reduce((sum, e) => sum + e.amount, 0);
@@ -137,7 +160,7 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/budgets", budgetId, "entries"] });
+      invalidateEntriesAcrossBudgets();
       resetForm();
       toast({ title: "Entry added" });
     },
@@ -149,7 +172,7 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/budgets", budgetId, "entries"] });
+      invalidateEntriesAcrossBudgets();
       setEditingEntry(null);
       resetForm();
     },
@@ -160,7 +183,7 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
       await apiRequest("DELETE", `/api/entries/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/budgets", budgetId, "entries"] });
+      invalidateEntriesAcrossBudgets();
       queryClient.invalidateQueries({ queryKey: ["/api/budgets", budgetId, "history"] });
       toast({ title: "Entry deleted" });
     },
@@ -172,7 +195,7 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/budgets", budgetId, "entries"] });
+      invalidateEntriesAcrossBudgets();
     },
   });
 
@@ -182,7 +205,7 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/budgets", budgetId, "entries"] });
+      invalidateEntriesAcrossBudgets();
     },
   });
 
@@ -268,6 +291,7 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
     const categoryName = getCategoryName(entry.categoryId);
     const categoryColor = getCategoryColor(entry.categoryId);
     const isIncome = entry.type === "income";
+    const trailingBalance = runningBalanceByEntryId.get(entry.id) ?? 0;
     const statusLabel = isIncome ? "Received" : "Paid";
     const isStarredUnpaidExpense = entry.isStarred && !entry.isPaidOrReceived && entry.type === "expense";
 
@@ -343,12 +367,18 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
           <p className="text-[10px] text-muted-foreground">{format(parseISO(entry.date), "MMM d, yyyy")}</p>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex flex-col items-end gap-0.5 shrink-0 min-w-[150px]">
           <span
             className={`text-sm font-semibold tabular-nums ${isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
             data-testid={`text-entry-amount-${entry.id}`}
           >
             {isIncome ? "+" : "-"}{formatCurrency(entry.amount, budgetCurrency)}
+          </span>
+          <span
+            className={`text-[11px] tabular-nums ${trailingBalance >= 0 ? "text-blue-600 dark:text-blue-400" : "text-orange-600 dark:text-orange-400"}`}
+            data-testid={`text-entry-trailing-balance-${entry.id}`}
+          >
+            Balance {formatCurrency(trailingBalance, budgetCurrency)}
           </span>
         </div>
 
@@ -487,35 +517,14 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
 
           <div>
             <div className="flex items-center justify-between gap-2 mb-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Income</h2>
-              <span className="text-xs text-muted-foreground">{incomeEntries.length} items</span>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Timeline</h2>
+              <span className="text-xs text-muted-foreground">{timelineEntries.length} items</span>
             </div>
-            {incomeEntries.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-2 text-center">No income entries yet</p>
+            {timelineEntries.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-2 text-center">No entries yet</p>
             ) : (
               <div className="space-y-0.5">
-                {incomeEntries.map(renderEntry)}
-              </div>
-            )}
-          </div>
-
-          <Separator />
-
-          <div>
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-red-700 dark:text-red-400">Expenses</h2>
-              <span className="text-xs text-muted-foreground">{expenseEntries.length} items</span>
-            </div>
-            {expenseEntries.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-2 text-center">No expense entries yet</p>
-            ) : (
-              <div className="space-y-0.5">
-                {[...expenseEntries].sort((a, b) => {
-                  const aStarredUnpaid = a.isStarred && !a.isPaidOrReceived ? 1 : 0;
-                  const bStarredUnpaid = b.isStarred && !b.isPaidOrReceived ? 1 : 0;
-                  if (bStarredUnpaid !== aStarredUnpaid) return bStarredUnpaid - aStarredUnpaid;
-                  return new Date(b.date).getTime() - new Date(a.date).getTime();
-                }).map(renderEntry)}
+                {timelineEntries.map(renderEntry)}
               </div>
             )}
           </div>

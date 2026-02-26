@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { FlaskConical, Plus, Trash2, ArrowRight, ArrowDown } from "lucide-react";
+import { formatCurrency } from "@/lib/currency";
 
 interface Scenario {
   id: string;
@@ -28,7 +29,13 @@ export default function WhatIfPage() {
   const [newAmount, setNewAmount] = useState("");
 
   const { data: budgets = [] } = useQuery<Budget[]>({ queryKey: ["/api/budgets"] });
-  const budgetId = selectedBudgetId ? parseInt(selectedBudgetId) : budgets[0]?.id;
+  const selectableBudgets = budgets.filter((b) => !b.isFolder);
+  const selectedId = selectedBudgetId ? parseInt(selectedBudgetId) : NaN;
+  const budgetId =
+    Number.isInteger(selectedId) && selectableBudgets.some((b) => b.id === selectedId)
+      ? selectedId
+      : selectableBudgets[0]?.id;
+  const budgetCurrency = selectableBudgets.find((b) => b.id === budgetId)?.currency || "USD";
   const { data: entries = [] } = useQuery<Entry[]>({
     queryKey: ["/api/budgets", budgetId, "entries"],
     enabled: !!budgetId,
@@ -93,7 +100,7 @@ export default function WhatIfPage() {
             <SelectValue placeholder="Select budget" />
           </SelectTrigger>
           <SelectContent>
-            {budgets.map(b => (
+            {selectableBudgets.map(b => (
               <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
             ))}
           </SelectContent>
@@ -110,15 +117,15 @@ export default function WhatIfPage() {
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
             <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-md p-2 sm:p-3">
               <p className="text-[10px] font-medium text-emerald-700 dark:text-emerald-400 uppercase">Income</p>
-              <p className="text-sm sm:text-base font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">${currentIncome.toFixed(2)}</p>
+              <p className="text-sm sm:text-base font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{formatCurrency(currentIncome, budgetCurrency)}</p>
             </div>
             <div className="bg-red-50 dark:bg-red-950/30 rounded-md p-2 sm:p-3">
               <p className="text-[10px] font-medium text-red-700 dark:text-red-400 uppercase">Expenses</p>
-              <p className="text-sm sm:text-base font-bold text-red-700 dark:text-red-400 tabular-nums">${currentExpenses.toFixed(2)}</p>
+              <p className="text-sm sm:text-base font-bold text-red-700 dark:text-red-400 tabular-nums">{formatCurrency(currentExpenses, budgetCurrency)}</p>
             </div>
             <div className="bg-blue-50 dark:bg-blue-950/30 rounded-md p-2 sm:p-3">
               <p className="text-[10px] font-medium text-blue-700 dark:text-blue-400 uppercase">Balance</p>
-              <p className="text-sm sm:text-base font-bold text-blue-700 dark:text-blue-400 tabular-nums">${currentBalance.toFixed(2)}</p>
+              <p className="text-sm sm:text-base font-bold text-blue-700 dark:text-blue-400 tabular-nums">{formatCurrency(currentBalance, budgetCurrency)}</p>
             </div>
           </div>
 
@@ -131,22 +138,22 @@ export default function WhatIfPage() {
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
             <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-md p-2 sm:p-3 border-2 border-emerald-200 dark:border-emerald-800">
               <p className="text-[10px] font-medium text-emerald-700 dark:text-emerald-400 uppercase">Income</p>
-              <p className="text-sm sm:text-base font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">${projectedIncome.toFixed(2)}</p>
+              <p className="text-sm sm:text-base font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{formatCurrency(projectedIncome, budgetCurrency)}</p>
             </div>
             <div className="bg-red-50 dark:bg-red-950/30 rounded-md p-2 sm:p-3 border-2 border-red-200 dark:border-red-800">
               <p className="text-[10px] font-medium text-red-700 dark:text-red-400 uppercase">Expenses</p>
-              <p className="text-sm sm:text-base font-bold text-red-700 dark:text-red-400 tabular-nums">${projectedExpenses.toFixed(2)}</p>
+              <p className="text-sm sm:text-base font-bold text-red-700 dark:text-red-400 tabular-nums">{formatCurrency(projectedExpenses, budgetCurrency)}</p>
             </div>
             <div className={`rounded-md p-2 sm:p-3 border-2 ${projectedBalance >= 0 ? "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800" : "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800"}`}>
               <p className={`text-[10px] font-medium uppercase ${projectedBalance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`}>Balance</p>
-              <p className={`text-sm sm:text-base font-bold tabular-nums ${projectedBalance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`}>${projectedBalance.toFixed(2)}</p>
+              <p className={`text-sm sm:text-base font-bold tabular-nums ${projectedBalance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400"}`}>{formatCurrency(projectedBalance, budgetCurrency)}</p>
             </div>
           </div>
 
           <div className={`text-center p-3 rounded-md ${balanceDiff > 0 ? "bg-emerald-50 dark:bg-emerald-950/30" : balanceDiff < 0 ? "bg-red-50 dark:bg-red-950/30" : "bg-muted"}`}>
             <p className="text-xs text-muted-foreground">Impact on Balance</p>
             <p className={`text-lg sm:text-xl font-bold tabular-nums ${balanceDiff > 0 ? "text-emerald-600 dark:text-emerald-400" : balanceDiff < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`} data-testid="text-balance-diff">
-              {balanceDiff >= 0 ? "+" : ""}${balanceDiff.toFixed(2)}
+              {balanceDiff >= 0 ? "+" : ""}{formatCurrency(balanceDiff, budgetCurrency)}
             </p>
           </div>
         </div>
@@ -196,7 +203,7 @@ export default function WhatIfPage() {
                   </Badge>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{sc.name}</p>
-                    <p className="text-xs text-muted-foreground">{sc.entryType} - ${sc.amount.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">{sc.entryType} - {formatCurrency(sc.amount, budgetCurrency)}</p>
                   </div>
                   <Button size="icon" variant="ghost" onClick={() => removeScenario(sc.id)} data-testid={`button-remove-scenario-${sc.id}`}>
                     <Trash2 className="w-3.5 h-3.5 text-muted-foreground" />

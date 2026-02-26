@@ -1,43 +1,72 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import type { Budget, Entry } from "@shared/schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line } from "recharts";
 import { parseISO, getMonth, getYear } from "date-fns";
+import { formatCurrency, formatNumber } from "@/lib/currency";
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export default function AnnualOverviewPage() {
   const currentYear = getYear(new Date());
   const [year, setYear] = useState(currentYear.toString());
-  const [selectedBudgetId, setSelectedBudgetId] = useState<string>("");
-  const { data: budgets = [] } = useQuery<Budget[]>({ queryKey: ["/api/budgets"] });
+  const [scope, setScope] = useState<string>("all");
 
-  const budgetId = selectedBudgetId ? parseInt(selectedBudgetId) : budgets[0]?.id;
+  const { data: budgets = [], isLoading: budgetsLoading } = useQuery<Budget[]>({
+    queryKey: ["/api/budgets"],
+  });
+  const selectableBudgets = budgets.filter((b) => !b.isFolder);
 
-  const { data: entries = [] } = useQuery<Entry[]>({
-    queryKey: ["/api/budgets", budgetId, "entries"],
-    enabled: !!budgetId,
+  const entriesQueries = useQueries({
+    queries: selectableBudgets.map((budget) => ({
+      queryKey: ["/api/budgets", budget.id, "entries"],
+      enabled: selectableBudgets.length > 0,
+    })),
   });
 
-  const yearEntries = entries.filter(e => getYear(parseISO(e.date)) === parseInt(year));
+  const entriesLoading = entriesQueries.some((q) => q.isLoading);
+
+  const entriesByBudget = new Map<number, Entry[]>();
+  selectableBudgets.forEach((budget, index) => {
+    entriesByBudget.set(budget.id, (entriesQueries[index]?.data as Entry[]) || []);
+  });
+
+  const selectedBudgetId = scope === "all" ? null : Number(scope);
+  const currency = selectedBudgetId
+    ? selectableBudgets.find((budget) => budget.id === selectedBudgetId)?.currency || "USD"
+    : selectableBudgets[0]?.currency || "USD";
+  const scopedEntries = selectedBudgetId
+    ? entriesByBudget.get(selectedBudgetId) || []
+    : Array.from(entriesByBudget.values()).flat();
+
+  const targetYear = parseInt(year, 10);
+  const yearEntries = scopedEntries.filter((entry) => getYear(parseISO(entry.date)) === targetYear);
 
   const monthlyBreakdown = MONTH_NAMES.map((name, index) => {
-    const monthEntries = yearEntries.filter(e => getMonth(parseISO(e.date)) === index);
-    const income = monthEntries.filter(e => e.type === "income").reduce((s, e) => s + e.amount, 0);
-    const expenses = monthEntries.filter(e => e.type === "expense").reduce((s, e) => s + e.amount, 0);
+    const monthEntries = yearEntries.filter((entry) => getMonth(parseISO(entry.date)) === index);
+    const income = monthEntries.filter((entry) => entry.type === "income").reduce((sum, entry) => sum + entry.amount, 0);
+    const expenses = monthEntries.filter((entry) => entry.type === "expense").reduce((sum, entry) => sum + entry.amount, 0);
     return { month: name, Income: income, Expenses: expenses, Savings: income - expenses };
   });
 
-  const totalIncome = yearEntries.filter(e => e.type === "income").reduce((s, e) => s + e.amount, 0);
-  const totalExpenses = yearEntries.filter(e => e.type === "expense").reduce((s, e) => s + e.amount, 0);
+  const totalIncome = yearEntries.filter((entry) => entry.type === "income").reduce((sum, entry) => sum + entry.amount, 0);
+  const totalExpenses = yearEntries.filter((entry) => entry.type === "expense").reduce((sum, entry) => sum + entry.amount, 0);
   const totalSavings = totalIncome - totalExpenses;
-  const savingsRate = totalIncome > 0 ? ((totalSavings / totalIncome) * 100).toFixed(1) : "0.0";
+  const savingsRate = totalIncome > 0 ? (totalSavings / totalIncome) * 100 : 0;
 
   const avgMonthlyIncome = totalIncome / 12;
   const avgMonthlyExpenses = totalExpenses / 12;
 
-  if (!budgetId) {
+  if (budgetsLoading || entriesLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-muted-foreground">Loading annual overview...</p>
+      </div>
+    );
+  }
+
+  if (selectableBudgets.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-muted-foreground">Create a budget first to see annual overview.</p>
@@ -55,18 +84,21 @@ export default function AnnualOverviewPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {[currentYear - 2, currentYear - 1, currentYear].map(y => (
+              {[currentYear - 2, currentYear - 1, currentYear].map((y) => (
                 <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Select value={selectedBudgetId || budgetId?.toString()} onValueChange={setSelectedBudgetId}>
-            <SelectTrigger className="w-[140px] sm:w-[160px]" data-testid="select-annual-budget">
-              <SelectValue placeholder="Select budget" />
+          <Select value={scope} onValueChange={setScope}>
+            <SelectTrigger className="w-[160px] sm:w-[200px]" data-testid="select-annual-budget">
+              <SelectValue placeholder="Budget scope" />
             </SelectTrigger>
             <SelectContent>
-              {budgets.map(b => (
-                <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
+              <SelectItem value="all">All Budgets</SelectItem>
+              {selectableBudgets.map((budget) => (
+                <SelectItem key={budget.id} value={budget.id.toString()}>
+                  {budget.name}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -76,19 +108,21 @@ export default function AnnualOverviewPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-md p-3">
           <p className="text-[10px] font-medium text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Total Income</p>
-          <p className="text-base sm:text-xl font-bold text-emerald-700 dark:text-emerald-400 tabular-nums" data-testid="text-annual-income">${totalIncome.toFixed(2)}</p>
+          <p className="text-base sm:text-xl font-bold text-emerald-700 dark:text-emerald-400 tabular-nums" data-testid="text-annual-income">{formatCurrency(totalIncome, currency)}</p>
         </div>
         <div className="bg-red-50 dark:bg-red-950/30 rounded-md p-3">
           <p className="text-[10px] font-medium text-red-700 dark:text-red-400 uppercase tracking-wider">Total Expenses</p>
-          <p className="text-base sm:text-xl font-bold text-red-700 dark:text-red-400 tabular-nums" data-testid="text-annual-expenses">${totalExpenses.toFixed(2)}</p>
+          <p className="text-base sm:text-xl font-bold text-red-700 dark:text-red-400 tabular-nums" data-testid="text-annual-expenses">{formatCurrency(totalExpenses, currency)}</p>
         </div>
         <div className="bg-blue-50 dark:bg-blue-950/30 rounded-md p-3">
           <p className="text-[10px] font-medium text-blue-700 dark:text-blue-400 uppercase tracking-wider">Net Savings</p>
-          <p className="text-base sm:text-xl font-bold text-blue-700 dark:text-blue-400 tabular-nums" data-testid="text-annual-savings">${totalSavings.toFixed(2)}</p>
+          <p className="text-base sm:text-xl font-bold text-blue-700 dark:text-blue-400 tabular-nums" data-testid="text-annual-savings">{formatCurrency(totalSavings, currency)}</p>
         </div>
         <div className="bg-purple-50 dark:bg-purple-950/30 rounded-md p-3">
           <p className="text-[10px] font-medium text-purple-700 dark:text-purple-400 uppercase tracking-wider">Savings Rate</p>
-          <p className="text-base sm:text-xl font-bold text-purple-700 dark:text-purple-400 tabular-nums" data-testid="text-savings-rate">{savingsRate}%</p>
+          <p className="text-base sm:text-xl font-bold text-purple-700 dark:text-purple-400 tabular-nums" data-testid="text-savings-rate">
+            {formatNumber(savingsRate, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+          </p>
         </div>
       </div>
 
@@ -99,8 +133,8 @@ export default function AnnualOverviewPage() {
             <BarChart data={monthlyBreakdown}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `$${v}`} />
-              <Tooltip formatter={(value: number) => `$${value.toFixed(2)}`} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => formatCurrency(v, currency)} />
+              <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
               <Legend />
               <Bar dataKey="Income" fill="#10b981" radius={[4, 4, 0, 0]} />
               <Bar dataKey="Expenses" fill="#ef4444" radius={[4, 4, 0, 0]} />
@@ -116,8 +150,8 @@ export default function AnnualOverviewPage() {
             <LineChart data={monthlyBreakdown}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `$${v}`} />
-              <Tooltip formatter={(value: number) => `$${value.toFixed(2)}`} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => formatCurrency(v, currency)} />
+              <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
               <Line type="monotone" dataKey="Savings" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
@@ -129,11 +163,11 @@ export default function AnnualOverviewPage() {
         <div className="grid grid-cols-2 gap-3 sm:gap-4">
           <div>
             <p className="text-xs text-muted-foreground">Avg Monthly Income</p>
-            <p className="text-base sm:text-lg font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">${avgMonthlyIncome.toFixed(2)}</p>
+            <p className="text-base sm:text-lg font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">{formatCurrency(avgMonthlyIncome, currency)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Avg Monthly Expenses</p>
-            <p className="text-base sm:text-lg font-semibold text-red-600 dark:text-red-400 tabular-nums">${avgMonthlyExpenses.toFixed(2)}</p>
+            <p className="text-base sm:text-lg font-semibold text-red-600 dark:text-red-400 tabular-nums">{formatCurrency(avgMonthlyExpenses, currency)}</p>
           </div>
         </div>
       </div>
@@ -154,10 +188,10 @@ export default function AnnualOverviewPage() {
               {monthlyBreakdown.map((row) => (
                 <tr key={row.month} className="border-b border-border/50">
                   <td className="py-2 px-2 font-medium text-xs sm:text-sm">{row.month}</td>
-                  <td className="py-2 px-2 text-right tabular-nums text-xs sm:text-sm text-emerald-600 dark:text-emerald-400">${row.Income.toFixed(2)}</td>
-                  <td className="py-2 px-2 text-right tabular-nums text-xs sm:text-sm text-red-600 dark:text-red-400">${row.Expenses.toFixed(2)}</td>
+                  <td className="py-2 px-2 text-right tabular-nums text-xs sm:text-sm text-emerald-600 dark:text-emerald-400">{formatCurrency(row.Income, currency)}</td>
+                  <td className="py-2 px-2 text-right tabular-nums text-xs sm:text-sm text-red-600 dark:text-red-400">{formatCurrency(row.Expenses, currency)}</td>
                   <td className={`py-2 px-2 text-right tabular-nums text-xs sm:text-sm font-medium ${row.Savings >= 0 ? "text-blue-600 dark:text-blue-400" : "text-orange-600 dark:text-orange-400"}`}>
-                    ${row.Savings.toFixed(2)}
+                    {formatCurrency(row.Savings, currency)}
                   </td>
                 </tr>
               ))}

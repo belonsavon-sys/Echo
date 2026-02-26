@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatCurrency } from "@/lib/currency";
+import { formatCurrency, formatNumber } from "@/lib/currency";
 import { ArrowLeftRight, TrendingUp, TrendingDown, Minus, ArrowUpDown } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -20,10 +20,10 @@ type SortDir = "asc" | "desc";
 
 function diffPercent(a: number, b: number): string {
   if (a === 0 && b === 0) return "0%";
-  if (a === 0) return "+100%";
+  if (a === 0) return `+${formatNumber(100)}%`;
   const pct = ((b - a) / Math.abs(a)) * 100;
-  const sign = pct > 0 ? "+" : "";
-  return `${sign}${pct.toFixed(1)}%`;
+  const sign = pct > 0 ? "+" : pct < 0 ? "-" : "";
+  return `${sign}${formatNumber(Math.abs(pct), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }
 
 function DiffIndicator({ a, b }: { a: number; b: number }) {
@@ -212,14 +212,14 @@ export default function ComparePage() {
                   <div className="space-y-0.5">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{budgetALabel}</p>
                     <p className="text-lg font-semibold" style={{ color: BUDGET_A_COLOR }} data-testid={`text-${item.label.toLowerCase().replace(/\s/g, "-")}-a`}>
-                      {item.isCount ? item.a : formatCurrency(item.a, currency)}
+                      {item.isCount ? formatNumber(item.a) : formatCurrency(item.a, currency)}
                     </p>
                   </div>
                   <DiffIndicator a={item.a} b={item.b} />
                   <div className="space-y-0.5 text-right">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{budgetBLabel}</p>
                     <p className="text-lg font-semibold" style={{ color: BUDGET_B_COLOR }} data-testid={`text-${item.label.toLowerCase().replace(/\s/g, "-")}-b`}>
-                      {item.isCount ? item.b : formatCurrency(item.b, currency)}
+                      {item.isCount ? formatNumber(item.b) : formatCurrency(item.b, currency)}
                     </p>
                   </div>
                 </div>

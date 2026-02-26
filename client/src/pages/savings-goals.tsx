@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Plus, Target, Trash2, CalendarIcon, TrendingUp } from "lucide-react";
 import { format, differenceInDays, parseISO } from "date-fns";
+import { formatCurrency, formatNumber } from "@/lib/currency";
 
 export default function SavingsGoalsPage() {
   const { toast } = useToast();
@@ -26,6 +27,7 @@ export default function SavingsGoalsPage() {
 
   const { data: goals = [] } = useQuery<SavingsGoal[]>({ queryKey: ["/api/savings-goals"] });
   const { data: budgets = [] } = useQuery<Budget[]>({ queryKey: ["/api/budgets"] });
+  const selectableBudgets = budgets.filter((b) => !b.isFolder);
 
   const createGoal = useMutation({
     mutationFn: async (data: any) => {
@@ -80,7 +82,7 @@ export default function SavingsGoalsPage() {
     if (amount <= 0) return;
     updateGoal.mutate({ id: goalId, data: { currentAmount: currentAmount + amount } });
     setAddAmount(prev => ({ ...prev, [goalId]: "" }));
-    toast({ title: `$${amount.toFixed(2)} added to goal` });
+    toast({ title: `${formatCurrency(amount, "USD")} added to goal` });
   }
 
   const PRESET_COLORS = ["#10b981", "#6366f1", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899"];
@@ -127,14 +129,14 @@ export default function SavingsGoalsPage() {
                   />
                 ))}
               </div>
-              {budgets.length > 0 && (
+              {selectableBudgets.length > 0 && (
                 <Select value={budgetIdStr} onValueChange={setBudgetIdStr}>
                   <SelectTrigger data-testid="select-goal-budget">
                     <SelectValue placeholder="Link to budget (optional)" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No budget</SelectItem>
-                    {budgets.map(b => (
+                    {selectableBudgets.map(b => (
                       <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -176,20 +178,20 @@ export default function SavingsGoalsPage() {
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between gap-2 text-sm">
-                    <span className="text-muted-foreground">${goal.currentAmount.toFixed(2)}</span>
-                    <span className="font-medium">${goal.targetAmount.toFixed(2)}</span>
+                    <span className="text-muted-foreground">{formatCurrency(goal.currentAmount, "USD")}</span>
+                    <span className="font-medium">{formatCurrency(goal.targetAmount, "USD")}</span>
                   </div>
                   <Progress value={percent} className="h-3" />
                   <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>{percent.toFixed(0)}% complete</span>
+                    <span>{formatNumber(percent, { maximumFractionDigits: 0 })}% complete</span>
                     {isComplete ? (
                       <span className="text-emerald-600 dark:text-emerald-400 font-medium">Goal reached!</span>
                     ) : (
-                      <span>${remaining.toFixed(2)} remaining</span>
+                      <span>{formatCurrency(remaining, "USD")} remaining</span>
                     )}
                   </div>
                   {daysLeft !== null && daysLeft > 0 && !isComplete && (
-                    <p className="text-xs text-muted-foreground">{daysLeft} days left</p>
+                    <p className="text-xs text-muted-foreground">{formatNumber(daysLeft)} days left</p>
                   )}
                 </div>
 

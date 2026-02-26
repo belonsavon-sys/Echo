@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Budget } from "@shared/schema";
+import type { Budget, NavigationPreferences } from "@shared/schema";
 import {
   Sidebar,
   SidebarContent,
@@ -22,11 +22,17 @@ import { Switch as SwitchComponent } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/components/theme-provider";
 import {
   Wallet, Plus, BarChart3, Calendar, Target, FlaskConical, History,
-  Tag, FolderOpen, Folder, Trash2, Sun, Moon, LayoutDashboard, Copy, Star, Landmark,
-  ArrowLeftRight, LogOut,
+  Tag, FolderOpen, Folder, Sun, Moon, LayoutDashboard, Star, Landmark,
+  ArrowLeftRight, LogOut, MoreHorizontal, ChevronDown, Settings2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
@@ -39,8 +45,10 @@ interface AppSidebarProps {
   onSelectView: (view: string) => void;
 }
 
+const YEAR_FOLDER_PATTERN = /^\d{4}$/;
+
 export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelectView }: AppSidebarProps) {
-  const { user } = useAuth();
+  const { user, logout, isLoggingOut } = useAuth();
   const { darkMode, setDarkMode, theme, setTheme, themes } = useTheme();
   const [showNewBudget, setShowNewBudget] = useState(false);
   const [newBudgetName, setNewBudgetName] = useState("");
@@ -56,17 +64,78 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingBudget, setDeletingBudget] = useState<Budget | null>(null);
+  const [showNavigationSettings, setShowNavigationSettings] = useState(false);
 
   const [folderOpenState, setFolderOpenState] = useState<Record<number, boolean>>({});
+  const [navigationState, setNavigationState] = useState<NavigationPreferences>({
+    hiddenToolIds: [],
+    moreExpanded: false,
+  });
+  const [moreOpen, setMoreOpen] = useState(false);
+  const convertedYearBudgetIdsRef = useRef<Set<number>>(new Set());
+  const convertingYearBudgetIdsRef = useRef<Set<number>>(new Set());
+  const didInitMoreOpenRef = useRef(false);
 
   const { data: budgets = [] } = useQuery<Budget[]>({ queryKey: ["/api/budgets"] });
+  const { data: navigationPreferences } = useQuery<NavigationPreferences>({
+    queryKey: ["/api/user-preferences/navigation"],
+  });
 
-  const folders = budgets.filter(b => b.isFolder && !b.parentId).sort((a, b) => a.sortOrder - b.sortOrder);
-  const topLevelBudgets = budgets.filter(b => !b.isFolder && !b.parentId).sort((a, b) => a.sortOrder - b.sortOrder);
-  const getChildBudgets = (folderId: number) =>
-    budgets.filter(b => b.parentId === folderId).sort((a, b) => a.sortOrder - b.sortOrder);
+  const getChildBudgets = (parentId: number | null) =>
+    budgets
+      .filter((b) => (b.parentId ?? null) === parentId)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  function getFolderOptions(parentId: number | null = null, depth = 0): Array<{ id: number; name: string; depth: number }> {
+    const items = getChildBudgets(parentId).filter((b) => b.isFolder);
+    const options: Array<{ id: number; name: string; depth: number }> = [];
+    for (const folder of items) {
+      options.push({ id: folder.id, name: folder.name, depth });
+      options.push(...getFolderOptions(folder.id, depth + 1));
+    }
+    return options;
+  }
+
+  const folderOptions = getFolderOptions();
+  const rootBudgets = getChildBudgets(null);
 
   const isFolderOpen = (id: number) => folderOpenState[id] !== false;
+
+  useEffect(() => {
+    const yearCandidates = budgets.filter(
+      (b) => !b.parentId && YEAR_FOLDER_PATTERN.test(b.name),
+    );
+    const pending = yearCandidates.filter(
+      (b) =>
+        !convertedYearBudgetIdsRef.current.has(b.id) &&
+        !convertingYearBudgetIdsRef.current.has(b.id),
+    );
+    if (pending.length === 0) return;
+
+    let cancelled = false;
+    let changed = false;
+    (async () => {
+      for (const budget of pending) {
+        convertingYearBudgetIdsRef.current.add(budget.id);
+        try {
+          await apiRequest("POST", `/api/budgets/${budget.id}/convert-to-year-folder`);
+          convertedYearBudgetIdsRef.current.add(budget.id);
+          changed = true;
+        } catch {
+          // Ignore; budget remains usable even if conversion fails.
+        } finally {
+          convertingYearBudgetIdsRef.current.delete(budget.id);
+        }
+      }
+      if (!cancelled && changed) {
+        queryClient.invalidateQueries({ queryKey: ["/api/budgets"] });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [budgets]);
 
   const createBudget = useMutation({
     mutationFn: async (data: any) => {
@@ -114,6 +183,72 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
     },
   });
 
+  const updateNavigationPreferences = useMutation({
+    mutationFn: async (data: Partial<NavigationPreferences>) => {
+      const res = await apiRequest("PATCH", "/api/user-preferences/navigation", data);
+      return res.json();
+    },
+    onSuccess: (saved: NavigationPreferences) => {
+      const normalized = normalizeNavigationState(saved);
+      queryClient.setQueryData(["/api/user-preferences/navigation"], normalized);
+      setNavigationState((prev) => ({
+        ...prev,
+        hiddenToolIds: normalized.hiddenToolIds ?? [],
+      }));
+    },
+  });
+
+  const navItems = [
+    { id: "reports", label: "Reports", icon: BarChart3 },
+    { id: "annual", label: "Annual Overview", icon: Calendar },
+    { id: "goals", label: "Savings Goals", icon: Target },
+    { id: "networth", label: "Net Worth", icon: Landmark },
+    { id: "whatif", label: "What If", icon: FlaskConical },
+    { id: "history", label: "History", icon: History },
+    { id: "tags", label: "Manage Tags", icon: Tag },
+    { id: "favorites", label: "Favorites", icon: Star },
+    { id: "compare", label: "Compare", icon: ArrowLeftRight },
+  ];
+  const allowedToolIds = new Set(navItems.map((item) => item.id));
+  const normalizeNavigationState = (prefs?: NavigationPreferences | null): NavigationPreferences => ({
+    hiddenToolIds: Array.from(
+      new Set((prefs?.hiddenToolIds ?? []).filter((id) => allowedToolIds.has(id))),
+    ),
+    moreExpanded: prefs?.moreExpanded ?? false,
+  });
+
+  useEffect(() => {
+    const normalized = normalizeNavigationState(navigationPreferences);
+    setNavigationState((prev) => ({
+      ...prev,
+      hiddenToolIds: normalized.hiddenToolIds ?? [],
+      moreExpanded: normalized.moreExpanded ?? false,
+    }));
+    if (!didInitMoreOpenRef.current) {
+      setMoreOpen(normalized.moreExpanded ?? false);
+      didInitMoreOpenRef.current = true;
+    }
+  }, [navigationPreferences]);
+
+  const hiddenToolIds = navigationState.hiddenToolIds ?? [];
+  const visibleNavItems = navItems.filter((item) => !hiddenToolIds.includes(item.id));
+
+  function patchNavigationPreferences(patch: Partial<NavigationPreferences>) {
+    const next = normalizeNavigationState({
+      hiddenToolIds,
+      moreExpanded: moreOpen,
+      ...patch,
+    });
+    setNavigationState((prev) => ({
+      ...prev,
+      hiddenToolIds: next.hiddenToolIds ?? [],
+      moreExpanded: next.moreExpanded ?? false,
+    }));
+    updateNavigationPreferences.mutate({
+      hiddenToolIds: next.hiddenToolIds,
+    });
+  }
+
   function handleCreateBudget() {
     if (!newBudgetName) return;
     createBudget.mutate({
@@ -128,8 +263,7 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
     });
   }
 
-  function handleDeleteClick(e: React.MouseEvent, budget: Budget) {
-    e.stopPropagation();
+  function requestDeleteBudget(budget: Budget) {
     if (budget.isFolder) {
       setDeletingBudget(budget);
       setShowDeleteConfirm(true);
@@ -138,8 +272,7 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
     }
   }
 
-  function handleCloneClick(e: React.MouseEvent, budget: Budget) {
-    e.stopPropagation();
+  function requestCloneBudget(budget: Budget) {
     setCloneSourceBudget(budget);
     setCloneName(`${budget.name} Copy`);
     setCloneParentId(budget.parentId ? String(budget.parentId) : "none");
@@ -155,19 +288,18 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
     });
   }
 
-  const navItems = [
-    { id: "reports", label: "Reports", icon: BarChart3 },
-    { id: "annual", label: "Annual Overview", icon: Calendar },
-    { id: "goals", label: "Savings Goals", icon: Target },
-    { id: "networth", label: "Net Worth", icon: Landmark },
-    { id: "whatif", label: "What If", icon: FlaskConical },
-    { id: "history", label: "History", icon: History },
-    { id: "tags", label: "Manage Tags", icon: Tag },
-    { id: "favorites", label: "Favorites", icon: Star },
-    { id: "compare", label: "Compare", icon: ArrowLeftRight },
-  ];
+  function handleMoreOpenChange(open: boolean) {
+    setMoreOpen(open);
+  }
 
-  function renderBudgetItem(budget: Budget, indent = false) {
+  function toggleToolVisibility(toolId: string) {
+    const nextHidden = hiddenToolIds.includes(toolId)
+      ? hiddenToolIds.filter((id) => id !== toolId)
+      : [...hiddenToolIds, toolId];
+    patchNavigationPreferences({ hiddenToolIds: nextHidden });
+  }
+
+  function renderBudgetItem(budget: Budget, depth = 0) {
     return (
       <SidebarMenuItem key={budget.id} data-testid={`budget-item-${budget.id}`}>
         <div
@@ -176,36 +308,50 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
           onClick={() => onSelectBudget(budget.id)}
           data-active={activeBudgetId === budget.id && activeView === "budget"}
           data-testid={`button-budget-${budget.id}`}
-          className={`flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-sm cursor-pointer hover:bg-sidebar-accent ${indent ? "pl-6" : ""} ${activeBudgetId === budget.id && activeView === "budget" ? "bg-sidebar-accent font-medium" : ""}`}
+          className={`flex items-center gap-2 w-full rounded-md pr-2 py-1.5 text-sm cursor-pointer hover:bg-sidebar-accent ${activeBudgetId === budget.id && activeView === "budget" ? "bg-sidebar-accent font-medium" : ""}`}
+          style={{ paddingLeft: `${0.5 + depth * 0.9}rem` }}
         >
-          <FolderOpen className="w-4 h-4 shrink-0" />
+          <Wallet className="w-4 h-4 shrink-0 text-sidebar-primary" />
           <span className="flex-1 truncate">{budget.name}</span>
-          <span className="flex items-center gap-0.5 shrink-0">
-            <span
-              role="button"
-              tabIndex={0}
-              onClick={(e) => { e.stopPropagation(); handleCloneClick(e as any, budget); }}
-              className="min-h-[28px] min-w-[28px] flex items-center justify-center rounded hover:bg-sidebar-accent"
-              data-testid={`button-clone-budget-${budget.id}`}
-            >
-              <Copy className="w-3 h-3 text-muted-foreground" />
-            </span>
-            <span
-              role="button"
-              tabIndex={0}
-              onClick={(e) => { e.stopPropagation(); handleDeleteClick(e as any, budget); }}
-              className="min-h-[28px] min-w-[28px] flex items-center justify-center rounded hover:bg-sidebar-accent"
-              data-testid={`button-delete-budget-${budget.id}`}
-            >
-              <Trash2 className="w-3 h-3 text-muted-foreground" />
-            </span>
-          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                onClick={(event) => event.stopPropagation()}
+                className="min-h-[28px] min-w-[28px] flex items-center justify-center rounded hover:bg-sidebar-accent"
+                data-testid={`button-budget-actions-${budget.id}`}
+              >
+                <MoreHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  requestCloneBudget(budget);
+                }}
+                data-testid={`button-clone-budget-${budget.id}`}
+              >
+                Clone budget
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  requestDeleteBudget(budget);
+                }}
+                data-testid={`button-delete-budget-${budget.id}`}
+                className="text-destructive focus:text-destructive"
+              >
+                Delete budget
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </SidebarMenuItem>
     );
   }
 
-  function renderFolder(folder: Budget) {
+  function renderFolder(folder: Budget, depth = 0) {
     const children = getChildBudgets(folder.id);
     const open = isFolderOpen(folder.id);
 
@@ -221,33 +367,54 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
             <div
               role="button"
               tabIndex={0}
-              className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-sm cursor-pointer hover:bg-sidebar-accent"
+              className="flex items-center gap-2 w-full rounded-md pr-2 py-1.5 text-sm cursor-pointer hover:bg-sidebar-accent"
+              style={{ paddingLeft: `${0.5 + depth * 0.9}rem` }}
               data-testid={`button-budget-${folder.id}`}
             >
               {open ? <FolderOpen className="w-4 h-4 shrink-0" /> : <Folder className="w-4 h-4 shrink-0" />}
               <span className="flex-1 truncate font-medium">{folder.name}</span>
-              <span
-                role="button"
-                tabIndex={0}
-                onClick={(e) => { e.stopPropagation(); handleDeleteClick(e as any, folder); }}
-                className="min-h-[28px] min-w-[28px] flex items-center justify-center rounded hover:bg-sidebar-accent"
-                data-testid={`button-delete-budget-${folder.id}`}
-              >
-                <Trash2 className="w-3 h-3 text-muted-foreground" />
-              </span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(event) => event.stopPropagation()}
+                    className="min-h-[28px] min-w-[28px] flex items-center justify-center rounded hover:bg-sidebar-accent"
+                    data-testid={`button-budget-actions-${folder.id}`}
+                  >
+                    <MoreHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      requestDeleteBudget(folder);
+                    }}
+                    data-testid={`button-delete-budget-${folder.id}`}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    Delete folder
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </CollapsibleTrigger>
         </SidebarMenuItem>
         <CollapsibleContent>
           <SidebarMenu>
-            {children.map((child) => renderBudgetItem(child, true))}
+            {children.map((child) => renderTreeNode(child, depth + 1))}
             {children.length === 0 && (
-              <p className="text-xs text-muted-foreground px-3 py-1 pl-7">Empty folder</p>
+              <p className="text-xs text-muted-foreground py-1" style={{ paddingLeft: `${1.4 + depth * 0.9}rem` }}>Empty folder</p>
             )}
           </SidebarMenu>
         </CollapsibleContent>
       </Collapsible>
     );
+  }
+
+  function renderTreeNode(node: Budget, depth = 0) {
+    if (node.isFolder) return renderFolder(node, depth);
+    return renderBudgetItem(node, depth);
   }
 
   return (
@@ -265,15 +432,22 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
             <span className="text-xs text-muted-foreground truncate flex-1" data-testid="text-user-name">
               {user.firstName || user.email || "User"}
             </span>
-            <a href="/api/logout" className="text-xs text-muted-foreground hover:text-foreground" data-testid="button-logout">
+            <button
+              type="button"
+              onClick={() => logout()}
+              disabled={isLoggingOut}
+              className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+              data-testid="button-logout"
+            >
               <LogOut className="w-3.5 h-3.5" />
-            </a>
+            </button>
           </div>
         )}
       </SidebarHeader>
 
       <SidebarContent>
         <SidebarGroup>
+          <SidebarGroupLabel>Core</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
@@ -323,10 +497,7 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
                     <Checkbox
                       id="is-folder"
                       checked={newBudgetIsFolder}
-                      onCheckedChange={(checked) => {
-                        setNewBudgetIsFolder(checked === true);
-                        if (checked) setNewBudgetParentId("none");
-                      }}
+                      onCheckedChange={(checked) => setNewBudgetIsFolder(checked === true)}
                       data-testid="button-create-folder"
                     />
                     <Label htmlFor="is-folder" className="text-sm">Create as folder</Label>
@@ -357,20 +528,22 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
                           ))}
                         </SelectContent>
                       </Select>
-                      {folders.length > 0 && (
-                        <Select value={newBudgetParentId} onValueChange={setNewBudgetParentId}>
-                          <SelectTrigger data-testid="select-parent-folder">
-                            <SelectValue placeholder="Parent folder (optional)" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">No folder</SelectItem>
-                            {folders.map((f) => (
-                              <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
                     </>
+                  )}
+                  {folderOptions.length > 0 && (
+                    <Select value={newBudgetParentId} onValueChange={setNewBudgetParentId}>
+                      <SelectTrigger data-testid="select-parent-folder">
+                        <SelectValue placeholder="Parent folder (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No folder</SelectItem>
+                        {folderOptions.map((f) => (
+                        <SelectItem key={f.id} value={String(f.id)}>
+                            {`${"-- ".repeat(f.depth)}${f.name}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   )}
                   <Button
                     onClick={handleCreateBudget}
@@ -386,8 +559,7 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {folders.map((folder) => renderFolder(folder))}
-              {topLevelBudgets.map((budget) => renderBudgetItem(budget))}
+              {rootBudgets.map((node) => renderTreeNode(node))}
               {budgets.length === 0 && (
                 <p className="text-xs text-muted-foreground px-3 py-2">No budgets yet. Create one to get started.</p>
               )}
@@ -396,22 +568,73 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Tools</SidebarGroupLabel>
+          <SidebarGroupLabel className="flex items-center justify-between gap-1">
+            <span>More</span>
+            <Dialog open={showNavigationSettings} onOpenChange={setShowNavigationSettings}>
+              <DialogTrigger asChild>
+                <Button size="icon" variant="ghost" className="h-5 w-5" data-testid="button-open-nav-settings">
+                  <Settings2 className="w-3.5 h-3.5" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Sidebar Preferences</DialogTitle>
+                  <DialogDescription>Show or hide optional tool pages in the More section.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-2 pt-2">
+                  {navItems.map((item) => {
+                    const visible = !hiddenToolIds.includes(item.id);
+                    return (
+                      <label key={item.id} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+                        <span className="flex items-center gap-2 text-sm">
+                          <item.icon className="w-4 h-4 text-muted-foreground" />
+                          {item.label}
+                        </span>
+                        <Checkbox
+                          checked={visible}
+                          onCheckedChange={() => toggleToolVisibility(item.id)}
+                          disabled={updateNavigationPreferences.isPending}
+                          data-testid={`checkbox-nav-${item.id}`}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              </DialogContent>
+            </Dialog>
+          </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {navItems.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    onClick={() => onSelectView(item.id)}
-                    data-active={activeView === item.id}
-                    data-testid={`button-nav-${item.id}`}
-                  >
-                    <item.icon className="w-4 h-4" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
+            <Collapsible open={moreOpen} onOpenChange={handleMoreOpenChange}>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton data-testid="button-toggle-more-tools">
+                      <ChevronDown className={`w-4 h-4 transition-transform ${moreOpen ? "rotate-0" : "-rotate-90"}`} />
+                      <span>Tools</span>
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
                 </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+              </SidebarMenu>
+              <CollapsibleContent>
+                <SidebarMenu className="mt-1">
+                  {visibleNavItems.map((item) => (
+                    <SidebarMenuItem key={item.id}>
+                      <SidebarMenuButton
+                        onClick={() => onSelectView(item.id)}
+                        data-active={activeView === item.id}
+                        data-testid={`button-nav-${item.id}`}
+                      >
+                        <item.icon className="w-4 h-4" />
+                        <span>{item.label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                  {visibleNavItems.length === 0 && (
+                    <p className="text-xs text-muted-foreground px-3 py-2">All optional tools are hidden.</p>
+                  )}
+                </SidebarMenu>
+              </CollapsibleContent>
+            </Collapsible>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
@@ -465,15 +688,17 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
               onChange={(e) => setCloneName(e.target.value)}
               data-testid="input-clone-budget-name"
             />
-            {folders.length > 0 && (
+            {folderOptions.length > 0 && (
               <Select value={cloneParentId} onValueChange={setCloneParentId}>
                 <SelectTrigger data-testid="select-clone-parent-folder">
                   <SelectValue placeholder="Parent folder (optional)" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">No folder</SelectItem>
-                  {folders.map((f) => (
-                    <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
+                  {folderOptions.map((f) => (
+                    <SelectItem key={f.id} value={String(f.id)}>
+                      {`${"-- ".repeat(f.depth)}${f.name}`}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

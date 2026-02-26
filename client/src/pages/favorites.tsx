@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Plus, Trash2, Edit2, X, Star } from "lucide-react";
+import { formatCurrency } from "@/lib/currency";
 
 export default function FavoritesPage() {
   const { toast } = useToast();
@@ -143,7 +144,7 @@ export default function FavoritesPage() {
                     className={`text-sm font-semibold tabular-nums shrink-0 ${isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
                     data-testid={`text-favorite-amount-${fav.id}`}
                   >
-                    {isIncome ? "+" : "-"}${fav.amount.toFixed(2)}
+                    {isIncome ? "+" : "-"}{formatCurrency(fav.amount, "USD")}
                   </span>
 
                   <div className="flex items-center gap-0.5">

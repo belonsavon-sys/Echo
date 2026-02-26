@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Trash2, Edit2, Check, X, Layers } from "lucide-react";
+import { formatNumber } from "@/lib/currency";
 
 const PRESET_COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#f97316", "#14b8a6", "#84cc16"];
 
@@ -174,11 +175,11 @@ export default function CategoriesSection({ budgetId }: CategoriesProps) {
                   <span className="text-sm font-medium flex-1 truncate">{cat.name}</span>
                   {hasLimit && (
                     <span className={`text-xs tabular-nums ${isOver ? "text-red-600 dark:text-red-400 font-semibold" : "text-muted-foreground"}`}>
-                      ${spent.toFixed(0)} / ${cat.budgetLimit!.toFixed(0)}
+                      ${formatNumber(spent, { maximumFractionDigits: 0 })} / ${formatNumber(cat.budgetLimit!, { maximumFractionDigits: 0 })}
                     </span>
                   )}
                   {!hasLimit && spent > 0 && (
-                    <span className="text-xs text-muted-foreground tabular-nums">${spent.toFixed(0)}</span>
+                    <span className="text-xs text-muted-foreground tabular-nums">${formatNumber(spent, { maximumFractionDigits: 0 })}</span>
                   )}
                   <div className="flex gap-0.5">
                     <button
