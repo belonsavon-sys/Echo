@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { User } from "@shared/models/auth";
-import { supabase } from "@/lib/supabase";
+import { supabase, setRememberMePreference } from "@/lib/supabase";
 
 async function fetchUser(): Promise<User | null> {
   const { data } = await supabase.auth.getSession();
@@ -40,7 +40,8 @@ export function useAuth() {
   });
 
   const signInWithPassword = useMutation({
-    mutationFn: async ({ email, password }: { email: string; password: string }) => {
+    mutationFn: async ({ email, password, rememberMe }: { email: string; password: string; rememberMe?: boolean }) => {
+      setRememberMePreference(rememberMe !== false);
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
     },

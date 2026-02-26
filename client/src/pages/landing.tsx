@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Wallet, Globe, BarChart3, Landmark, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/hooks/use-auth";
+import { getRememberMePreference } from "@/lib/supabase";
 
 const features = [
   {
@@ -39,6 +41,7 @@ export default function LandingPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(getRememberMePreference());
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +49,7 @@ export default function LandingPage() {
     setError(null);
     setNotice(null);
     try {
-      await signInWithPassword({ email, password });
+      await signInWithPassword({ email, password, rememberMe });
     } catch (err: any) {
       setError(err?.message || "Unable to sign in");
     }
@@ -107,6 +110,14 @@ export default function LandingPage() {
               onChange={(e) => setPassword(e.target.value)}
               data-testid="input-auth-password"
             />
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Checkbox
+                checked={rememberMe}
+                onCheckedChange={(checked) => setRememberMe(checked === true)}
+                data-testid="checkbox-remember-me"
+              />
+              <span>Remember me</span>
+            </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <Button
                 size="lg"
