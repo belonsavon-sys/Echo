@@ -38,6 +38,7 @@ export const budgets = pgTable(
     rolloverAmount: money("rollover_amount").notNull().default(sql`0`),
     openingBalance: money("opening_balance").notNull().default(sql`0`),
     openingBalanceMode: text("opening_balance_mode").notNull().default("manual"),
+    entryOrderMode: text("entry_order_mode").notNull().default("auto_date"),
     parentId: integer("parent_id").references((): AnyPgColumn => budgets.id, { onDelete: "set null" }),
     isFolder: boolean("is_folder").notNull().default(false),
     currency: text("currency").notNull().default("USD"),

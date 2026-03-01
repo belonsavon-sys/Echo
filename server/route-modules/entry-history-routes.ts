@@ -269,6 +269,14 @@ export function registerEntryHistoryRoutes(app: Express, deps: EntryHistoryRoute
       return res.status(400).json({ message: validation.message });
     }
 
+    const budget = await storage.getBudget(budgetId, userId);
+    if (!budget) {
+      return res.status(404).json({ message: "Budget not found" });
+    }
+    if (budget.entryOrderMode !== "manual") {
+      await storage.updateBudget(budgetId, { entryOrderMode: "manual" }, userId);
+    }
+
     await storage.reorderEntriesInBudget(budgetId, orderedEntryIds);
     const reordered = await storage.getEntries(budgetId);
     res.json(reordered);

@@ -58,7 +58,6 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
   const [newBudgetParentId, setNewBudgetParentId] = useState<string>("none");
   const [newBudgetCurrency, setNewBudgetCurrency] = useState("USD");
   const [newBudgetOpeningBalance, setNewBudgetOpeningBalance] = useState("0");
-  const [newBudgetOpeningBalanceMode, setNewBudgetOpeningBalanceMode] = useState<"manual" | "carryover">("manual");
 
   const [showCloneDialog, setShowCloneDialog] = useState(false);
   const [cloneSourceBudget, setCloneSourceBudget] = useState<Budget | null>(null);
@@ -152,7 +151,6 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
       setNewBudgetIsFolder(false);
       setNewBudgetParentId("none");
       setNewBudgetOpeningBalance("0");
-      setNewBudgetOpeningBalanceMode("manual");
       if (!budget.isFolder) {
         onSelectBudget(budget.id);
       }
@@ -269,7 +267,6 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
       parentId: newBudgetParentId !== "none" ? Number(newBudgetParentId) : null,
       currency: newBudgetCurrency,
       openingBalance: parsedOpeningBalance,
-      openingBalanceMode: newBudgetIsFolder ? "manual" : newBudgetOpeningBalanceMode,
     });
   }
 
@@ -485,7 +482,6 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
                 setNewBudgetName("");
                 setNewBudgetCurrency("USD");
                 setNewBudgetOpeningBalance("0");
-                setNewBudgetOpeningBalanceMode("manual");
               }
             }}>
               <DialogTrigger asChild>
@@ -538,18 +534,6 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
                               {c.symbol} {c.code} - {c.name}
                             </SelectItem>
                           ))}
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={newBudgetOpeningBalanceMode}
-                        onValueChange={(value: "manual" | "carryover") => setNewBudgetOpeningBalanceMode(value)}
-                      >
-                        <SelectTrigger data-testid="select-budget-opening-mode">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="manual">Manual opening balance</SelectItem>
-                          <SelectItem value="carryover">Auto carryover</SelectItem>
                         </SelectContent>
                       </Select>
                     </>

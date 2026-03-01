@@ -13,9 +13,10 @@
 - Category create/edit/delete
 - Entry create/edit/delete
 - Recurring entry flow
-- Carryover opening/closing balances across month budgets in year folders
+- Carryover opening/closing balances across month budgets in year folders (with month-level starting-balance adjustments)
+- Date-first default transaction ordering and switch-to-manual after drag reorder
 - Manual drag reorder persistence on mobile and desktop
-- Reports and annual overview consistency
+- Reports and annual overview consistency, including Reports month/year mode
 - Cross-account isolation (user A cannot access user B data)
 
 ## Regression Gate

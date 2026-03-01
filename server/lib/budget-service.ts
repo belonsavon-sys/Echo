@@ -17,7 +17,6 @@ import {
 const DEFAULT_BUDGET_CATEGORIES: Array<{ name: string; color: string }> = [
   { name: "Shopping", color: "#f97316" },
   { name: "Credit", color: "#ef4444" },
-  { name: "Income", color: "#10b981" },
   { name: "Subscriptions", color: "#6366f1" },
   { name: "Debt", color: "#b91c1c" },
   { name: "Investing", color: "#059669" },
@@ -25,6 +24,10 @@ const DEFAULT_BUDGET_CATEGORIES: Array<{ name: string; color: string }> = [
   { name: "Bill", color: "#2563eb" },
   { name: "Other", color: "#6b7280" },
 ];
+
+export function getDefaultBudgetCategories(): Array<{ name: string; color: string }> {
+  return DEFAULT_BUDGET_CATEGORIES.map((template) => ({ ...template }));
+}
 
 export async function verifyBudgetOwnership(
   storage: IStorage,

@@ -16,10 +16,6 @@ type ResolvedCarryoverContext = {
   monthBudgets: Budget[];
 };
 
-function normalizeMode(value: string | null | undefined): BalanceMode {
-  return value === "carryover" ? "carryover" : "manual";
-}
-
 function byMonthOrder(left: Budget, right: Budget): number {
   const bySort = left.sortOrder - right.sortOrder;
   if (bySort !== 0) return bySort;
@@ -90,8 +86,8 @@ export async function computeBudgetBalanceContext(
       };
     }
 
-    const mode = normalizeMode(target.openingBalanceMode);
     const targetContext = resolveCarryoverContext(target, budgetsById);
+    const mode: BalanceMode = targetContext ? "carryover" : "manual";
     let opening = target.openingBalance ?? 0;
     let sourceBudgetId: number | null = null;
 
@@ -100,10 +96,10 @@ export async function computeBudgetBalanceContext(
       if (monthIndex > 0) {
         const previousBudget = targetContext.monthBudgets[monthIndex - 1];
         const previous = computeForBudget(previousBudget);
-        opening = previous.closing;
+        opening = previous.closing + (target.openingBalance ?? 0);
         sourceBudgetId = previousBudget.id;
       } else {
-        opening = targetContext.yearFolder.openingBalance ?? 0;
+        opening = (targetContext.yearFolder.openingBalance ?? 0) + (target.openingBalance ?? 0);
       }
     }
 
@@ -117,10 +113,11 @@ export async function computeBudgetBalanceContext(
   };
 
   const computed = computeForBudget(budget);
+  const isCarryoverBudget = !!carryoverContext;
   return {
     effectiveOpeningBalance: computed.opening,
     computedClosingBalance: computed.closing,
     carryoverSourceBudgetId: computed.sourceBudgetId,
-    mode: normalizeMode(budget.openingBalanceMode),
+    mode: isCarryoverBudget ? "carryover" : "manual",
   };
 }

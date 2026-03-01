@@ -4,6 +4,11 @@
 A mobile-first minimalist budget tracking application called Echo. Features hierarchical budget folders, dark mode with 10 color themes, income/expense management with smart status marking, recurring entries, envelope/category budgeting, custom tags, spending reports with comparisons and predictions, savings goals tracking, what-if scenario planning, annual overview, change history with undo, CSV export, quick-add favorites, net worth tracker, multi-currency support, budget comparison, and PWA support.
 
 ## Recent Changes
+- 2026-03-01: Added date-first default entry ordering with automatic switch to manual mode on drag reorder
+- 2026-03-01: Added reports Month/Year period mode with full-year aggregation and year comparison
+- 2026-03-01: Made carryover fully automatic for month budgets in year folders (no mode toggle in UI)
+- 2026-03-01: Fixed dashboard/compare page scroll ownership and shell overflow behavior on web/mobile web
+- 2026-03-01: Removed default "Income" category from new-budget category seeding
 - 2026-02-28: Added non-Replit local dev tooling (status banner, API timing panel, React Query Devtools loader)
 - 2026-02-28: Added auth-protected dev route explorer (`GET /api/dev/routes`, UI at `/dev/routes`) enabled only outside production
 - 2026-02-28: Added local stack bootstrap (`docker-compose.dev.yml`, `npm run dev:stack`) and env validation script (`npm run env:check`)
@@ -72,6 +77,7 @@ A mobile-first minimalist budget tracking application called Echo. Features hier
 - `client/src/pages/dashboard.tsx` - Home page with cross-budget summary
 - `client/src/pages/budget.tsx` - Core budget page with entry management, animated counters
 - `client/src/pages/reports.tsx` - Enhanced reports with comparisons, predictions, analytics
+- `client/src/lib/reports-period.ts` - Shared month/year reporting period calculations
 - `client/src/pages/annual-overview.tsx` - Annual month-by-month dashboard
 - `client/src/pages/savings-goals.tsx` - Savings goals with progress bars
 - `client/src/pages/what-if.tsx` - What-if scenario planner
@@ -112,7 +118,10 @@ A mobile-first minimalist budget tracking application called Echo. Features hier
 ### Design Decisions
 - Status marking is context-aware: "Paid" for expenses, "Received" for income
 - Recurring entries auto-populate child entries until end date or end of year
-- Money-left indicator uses fuel gauge-style progress bar
+- Month budgets under year folders use automatic carryover with month-level opening-balance adjustments
+- Budget timeline defaults to date order; first drag reorder switches that budget to manual ordering
+- Reports support month and full-year period modes
+- New budgets seed without a default "Income" category (existing budgets are unchanged)
 - Categories shown in right panel on desktop, bottom sheet on mobile
 - Sidebar as drawer on mobile with hamburger trigger
 - Color scheme: emerald for income, red for expenses, blue for balance

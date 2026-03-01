@@ -19,6 +19,7 @@ import { Plus, Star, Trash2, Edit2, RotateCcw, GripVertical, Tag as TagIcon, Cal
 import { format, parseISO } from "date-fns";
 import { exportBudgetToCSV } from "@/lib/export-csv";
 import { formatCurrency } from "@/lib/currency";
+import { orderEntriesForTimeline, type EntryOrderMode } from "@/lib/entry-order";
 
 function useAnimatedNumber(value: number, duration = 500) {
   const [displayValue, setDisplayValue] = useState(value);
@@ -255,7 +256,6 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
   const [recurringEndDate, setRecurringEndDate] = useState<Date | undefined>(undefined);
   const [recurringEndAmount, setRecurringEndAmount] = useState("");
   const [openingBalanceInput, setOpeningBalanceInput] = useState("0");
-  const [openingBalanceMode, setOpeningBalanceMode] = useState<"manual" | "carryover">("manual");
   const [orderedEntries, setOrderedEntries] = useState<Entry[]>([]);
 
   const { data: budget } = useQuery<Budget>({ queryKey: ["/api/budgets", budgetId] });
@@ -275,7 +275,6 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
   useEffect(() => {
     if (!budget) return;
     setOpeningBalanceInput((budget.openingBalance ?? 0).toString());
-    setOpeningBalanceMode(budget.openingBalanceMode === "carryover" ? "carryover" : "manual");
   }, [budget]);
 
   const sensors = useSensors(
@@ -397,9 +396,11 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
     onSuccess: (reordered) => {
       setOrderedEntries(reordered);
       queryClient.invalidateQueries({ queryKey: ["/api/budgets", budgetId, "entries"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/budgets", budgetId] });
     },
     onError: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/budgets", budgetId, "entries"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/budgets", budgetId] });
       toast({
         title: "Unable to save order",
         description: "The entry list was refreshed to the last saved order.",
@@ -409,10 +410,9 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
   });
 
   const saveBudgetSettings = useMutation({
-    mutationFn: async ({ openingBalance, mode }: { openingBalance: number; mode: "manual" | "carryover" }) => {
+    mutationFn: async ({ openingBalance }: { openingBalance: number }) => {
       const res = await apiRequest("PATCH", `/api/budgets/${budgetId}`, {
         openingBalance,
-        openingBalanceMode: mode,
       });
       return res.json();
     },
@@ -424,9 +424,15 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
     },
   });
 
+  const entryOrderMode: EntryOrderMode = budget?.entryOrderMode === "manual" ? "manual" : "auto_date";
+  const timelineBaseEntries = useMemo(
+    () => orderEntriesForTimeline(orderedEntries, entryOrderMode),
+    [orderedEntries, entryOrderMode],
+  );
+
   const filteredEntries = filterTag
-    ? orderedEntries.filter((entry) => entry.tagIds?.includes(filterTag))
-    : orderedEntries;
+    ? timelineBaseEntries.filter((entry) => entry.tagIds?.includes(filterTag))
+    : timelineBaseEntries;
 
   const timelineEntries = filteredEntries;
 
@@ -565,15 +571,18 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    setOrderedEntries((previous) => {
-      const oldIndex = previous.findIndex((entry) => entry.id === active.id);
-      const newIndex = previous.findIndex((entry) => entry.id === over.id);
-      if (oldIndex === -1 || newIndex === -1) return previous;
+    const oldIndex = timelineEntries.findIndex((entry) => entry.id === active.id);
+    const newIndex = timelineEntries.findIndex((entry) => entry.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
 
-      const next = arrayMove(previous, oldIndex, newIndex);
-      reorderEntries.mutate(next.map((entry) => entry.id));
-      return next;
-    });
+    const next = arrayMove(timelineEntries, oldIndex, newIndex);
+    if (entryOrderMode !== "manual") {
+      queryClient.setQueryData<Budget>(["/api/budgets", budgetId], (current) =>
+        current ? { ...current, entryOrderMode: "manual" } : current,
+      );
+    }
+    setOrderedEntries(next);
+    reorderEntries.mutate(next.map((entry) => entry.id));
   }
 
   function handleSaveBudgetSettings() {
@@ -585,7 +594,6 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
 
     saveBudgetSettings.mutate({
       openingBalance: parsedOpeningBalance,
-      mode: openingBalanceMode,
     });
   }
 
@@ -739,6 +747,11 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
 
             {filterTag && (
               <p className="mb-2 text-xs text-muted-foreground">Disable tag filter to reorder entries.</p>
+            )}
+            {!filterTag && entryOrderMode === "auto_date" && (
+              <p className="mb-2 text-xs text-muted-foreground">
+                Sorted by date. Drag to switch to manual order.
+              </p>
             )}
 
             {timelineEntries.length === 0 ? (
@@ -1009,26 +1022,6 @@ export default function BudgetPage({ budgetId, categoriesButton }: BudgetPagePro
                 data-testid="input-budget-opening-balance"
               />
             </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Opening balance mode</label>
-              <Select
-                value={openingBalanceMode}
-                onValueChange={(value: "manual" | "carryover") => setOpeningBalanceMode(value)}
-              >
-                <SelectTrigger data-testid="select-budget-opening-balance-mode">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="manual">Manual</SelectItem>
-                  <SelectItem value="carryover">Auto carryover</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              Carryover mode is intended for month budgets inside a year folder.
-            </p>
 
             <Button
               className="w-full"

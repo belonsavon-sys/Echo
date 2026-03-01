@@ -18,6 +18,7 @@ function budget(overrides: Partial<Budget>): Budget {
     rolloverAmount: 0,
     openingBalance: 0,
     openingBalanceMode: "manual",
+    entryOrderMode: "auto_date",
     parentId: null,
     isFolder: false,
     currency: "USD",
@@ -58,7 +59,7 @@ function storageFor(budgets: Budget[], entries: Entry[]): IStorage {
   } as unknown as IStorage;
 }
 
-test("carryover: January uses year-folder opening balance", async () => {
+test("carryover: January uses year-folder opening plus month adjustment", async () => {
   const year = budget({
     id: 100,
     name: "2026",
@@ -71,8 +72,7 @@ test("carryover: January uses year-folder opening balance", async () => {
     name: "January",
     parentId: 100,
     sortOrder: 0,
-    openingBalanceMode: "carryover",
-    openingBalance: 0,
+    openingBalance: 150,
   });
 
   const context = await computeBudgetBalanceContext(
@@ -83,12 +83,12 @@ test("carryover: January uses year-folder opening balance", async () => {
 
   assert.ok(context);
   assert.equal(context.mode, "carryover");
-  assert.equal(context.effectiveOpeningBalance, 1200);
-  assert.equal(context.computedClosingBalance, 900);
+  assert.equal(context.effectiveOpeningBalance, 1350);
+  assert.equal(context.computedClosingBalance, 1050);
   assert.equal(context.carryoverSourceBudgetId, null);
 });
 
-test("carryover: later months use prior month closing balance", async () => {
+test("carryover: later months use prior closing plus month adjustment", async () => {
   const year = budget({
     id: 200,
     name: "2026",
@@ -101,14 +101,14 @@ test("carryover: later months use prior month closing balance", async () => {
     name: "January",
     parentId: 200,
     sortOrder: 0,
-    openingBalanceMode: "carryover",
+    openingBalance: 100,
   });
   const february = budget({
     id: 202,
     name: "February",
     parentId: 200,
     sortOrder: 1,
-    openingBalanceMode: "carryover",
+    openingBalance: 50,
   });
 
   const context = await computeBudgetBalanceContext(
@@ -125,44 +125,28 @@ test("carryover: later months use prior month closing balance", async () => {
   );
 
   assert.ok(context);
-  assert.equal(context.effectiveOpeningBalance, 1200);
-  assert.equal(context.computedClosingBalance, 1150);
+  assert.equal(context.effectiveOpeningBalance, 1350);
+  assert.equal(context.computedClosingBalance, 1300);
   assert.equal(context.carryoverSourceBudgetId, january.id);
 });
 
-test("manual mode ignores prior month carryover chain", async () => {
-  const year = budget({
+test("manual mode: non-year-folder budget uses only its own opening balance", async () => {
+  const standalone = budget({
     id: 300,
-    name: "2026",
-    period: "yearly",
-    isFolder: true,
-    openingBalance: 1000,
-  });
-  const january = budget({
-    id: 301,
-    name: "January",
-    parentId: 300,
+    name: "Standalone",
+    parentId: null,
     sortOrder: 0,
-    openingBalanceMode: "carryover",
-  });
-  const february = budget({
-    id: 302,
-    name: "February",
-    parentId: 300,
-    sortOrder: 1,
-    openingBalanceMode: "manual",
     openingBalance: 500,
   });
 
   const context = await computeBudgetBalanceContext(
     storageFor(
-      [year, january, february],
+      [standalone],
       [
-        entry({ id: 1, budgetId: 301, type: "income", amount: 400 }),
-        entry({ id: 2, budgetId: 302, type: "expense", amount: 200 }),
+        entry({ id: 1, budgetId: 300, type: "expense", amount: 200 }),
       ],
     ),
-    february.id,
+    standalone.id,
     "user-1",
   );
 

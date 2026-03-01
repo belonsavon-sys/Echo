@@ -315,7 +315,7 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="p-4 space-y-4">
+      <div className="h-full overflow-auto p-4 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[1, 2, 3, 4].map((index) => (
             <Skeleton key={index} className="h-28 rounded-md" />
@@ -328,25 +328,27 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="p-4 space-y-6 max-w-6xl mx-auto">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-lg font-semibold">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Overview across all budgets.</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {DEFAULT_CARD_ORDER.map((cardId) => (
-          <div
-            key={cardId}
-            className={cardId === "income" || cardId === "expenses" || cardId === "balance" || cardId === "activeBudgets"
-              ? "xl:col-span-1"
-              : "xl:col-span-2"}
-          >
-            {renderCard(cardId)}
+    <div className="h-full overflow-auto">
+      <div className="p-4 space-y-6 max-w-6xl mx-auto">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h1 className="text-lg font-semibold">Dashboard</h1>
+            <p className="text-sm text-muted-foreground">Overview across all budgets.</p>
           </div>
-        ))}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          {DEFAULT_CARD_ORDER.map((cardId) => (
+            <div
+              key={cardId}
+              className={cardId === "income" || cardId === "expenses" || cardId === "balance" || cardId === "activeBudgets"
+                ? "xl:col-span-1"
+                : "xl:col-span-2"}
+            >
+              {renderCard(cardId)}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

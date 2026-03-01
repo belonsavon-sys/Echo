@@ -5,13 +5,12 @@ with defaults(ord, name, color) as (
   values
     (1, 'Shopping', '#f97316'),
     (2, 'Credit', '#ef4444'),
-    (3, 'Income', '#10b981'),
-    (4, 'Subscriptions', '#6366f1'),
-    (5, 'Debt', '#b91c1c'),
-    (6, 'Investing', '#059669'),
-    (7, 'Food', '#f59e0b'),
-    (8, 'Bill', '#2563eb'),
-    (9, 'Other', '#6b7280')
+    (3, 'Subscriptions', '#6366f1'),
+    (4, 'Debt', '#b91c1c'),
+    (5, 'Investing', '#059669'),
+    (6, 'Food', '#f59e0b'),
+    (7, 'Bill', '#2563eb'),
+    (8, 'Other', '#6b7280')
 ),
 target_budgets as (
   select id

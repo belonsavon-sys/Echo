@@ -18,6 +18,7 @@ function budget(overrides: Partial<Budget>): Budget {
     rolloverAmount: 0,
     openingBalance: 0,
     openingBalanceMode: "manual",
+    entryOrderMode: "auto_date",
     parentId: null,
     isFolder: false,
     currency: "USD",

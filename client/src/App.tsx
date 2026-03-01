@@ -188,7 +188,7 @@ function AppContent() {
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex h-dvh min-h-0 w-full overflow-hidden">
+      <div className="flex h-full min-h-0 w-full overflow-hidden">
         <AppSidebar
           activeBudgetId={activeBudgetId}
           activeView={activeView}

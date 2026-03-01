@@ -23,7 +23,9 @@
 ## 4. Pre-Deploy Validation
 - [ ] `npm run env:check` passes with production env values
 - [ ] `npm run check` passes locally (regression tests + type check)
+- [ ] `npm run build` passes locally
 - [ ] SQL/data migration scripts for this release are reviewed
+- [ ] Apply `script/migrate-entry-order-mode.sql` before app deploy
 - [ ] Supabase JWT settings (issuer/audience) match server expectations
 - [ ] Dev-only endpoints are absent in production (for example `/api/dev/routes` returns `404`)
 
@@ -37,7 +39,9 @@
 - [ ] Sign up and email-magic-link flow returns through `/auth/callback` and lands on dashboard
 - [ ] Create/edit budget and entry
 - [ ] Validate year-folder routing and recurring entry behavior
-- [ ] Validate carryover opening/closing balances across year-folder month chain
+- [ ] Validate carryover opening/closing balances across year-folder month chain (including month opening-balance adjustments)
+- [ ] Validate date-first default entry order, then drag reorder switches to manual order and persists
 - [ ] Validate dashboard/reports/annual totals
-- [ ] Validate reports month/year picker for historical and future periods
+- [ ] Validate reports month/year mode for historical, current, and future periods
+- [ ] Validate dashboard and compare pages scroll without white footer reveal/header loss
 - [ ] Verify tenant isolation by logging in as a second user and confirming no cross-user data visibility

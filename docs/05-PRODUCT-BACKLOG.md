@@ -3,11 +3,13 @@
 Use this as a living prioritized backlog.
 
 ## P0 Now
-- [x] Add opening balance + carryover controls for monthly budgets in year folders
+- [x] Add opening balance + hidden automatic carryover for monthly budgets in year folders
 - [x] Add recurring end-by-amount support (with date+amount stop behavior)
-- [x] Add manual transaction reordering with persistent order API
-- [x] Add reports month/year period picker (future periods no longer forced to current month)
+- [x] Add date-first default transaction ordering with manual drag reorder override
+- [x] Add reports month/year period mode (including full-year reporting)
 - [x] Add auth callback route and Supabase redirect hardening
+- [x] Fix dashboard/compare page scrolling and shell overflow stability
+- [x] Remove default "Income" category from new budget seeding (existing budgets unchanged)
 - [ ] Deploy smoke-test checklist automation
 
 ## P1 Next

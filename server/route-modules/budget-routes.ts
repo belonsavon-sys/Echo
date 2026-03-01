@@ -21,8 +21,8 @@ type BudgetRouteDeps = {
 export function registerBudgetRoutes(app: Express, deps: BudgetRouteDeps): void {
   const { isAuthenticated, storage } = deps;
 
-  function isValidOpeningBalanceMode(value: unknown): value is "manual" | "carryover" {
-    return value === "manual" || value === "carryover";
+  function isValidEntryOrderMode(value: unknown): value is "auto_date" | "manual" {
+    return value === "auto_date" || value === "manual";
   }
 
   app.get("/api/budgets", isAuthenticated, async (req, res) => {
@@ -49,11 +49,24 @@ export function registerBudgetRoutes(app: Express, deps: BudgetRouteDeps): void 
     const userId = getAuthenticatedUserId(req);
     const parsed = insertBudgetSchema.safeParse({ ...req.body, userId });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    if (!isValidOpeningBalanceMode(parsed.data.openingBalanceMode)) {
-      return res.status(400).json({ message: "openingBalanceMode must be 'manual' or 'carryover'" });
+    if (
+      parsed.data.entryOrderMode !== undefined &&
+      !isValidEntryOrderMode(parsed.data.entryOrderMode)
+    ) {
+      return res.status(400).json({ message: "entryOrderMode must be 'auto_date' or 'manual'" });
     }
 
-    let budget = await storage.createBudget(parsed.data);
+    const {
+      openingBalanceMode: _ignoredOpeningBalanceMode,
+      entryOrderMode,
+      ...createData
+    } = parsed.data;
+
+    let budget = await storage.createBudget({
+      ...createData,
+      openingBalanceMode: "manual",
+      entryOrderMode: entryOrderMode ?? "auto_date",
+    });
     if (isYearFolder(budget)) {
       const year = getYearFromFolderName(budget.name)!;
       const normalized = await storage.updateBudget(
@@ -78,12 +91,14 @@ export function registerBudgetRoutes(app: Express, deps: BudgetRouteDeps): void 
     const parsed = insertBudgetSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     if (
-      parsed.data.openingBalanceMode !== undefined &&
-      !isValidOpeningBalanceMode(parsed.data.openingBalanceMode)
+      parsed.data.entryOrderMode !== undefined &&
+      !isValidEntryOrderMode(parsed.data.entryOrderMode)
     ) {
-      return res.status(400).json({ message: "openingBalanceMode must be 'manual' or 'carryover'" });
+      return res.status(400).json({ message: "entryOrderMode must be 'auto_date' or 'manual'" });
     }
-    const budget = await storage.updateBudget(Number(req.params.id), parsed.data, userId);
+
+    const { openingBalanceMode: _ignoredOpeningBalanceMode, ...patchData } = parsed.data;
+    const budget = await storage.updateBudget(Number(req.params.id), patchData, userId);
     if (!budget) return res.status(404).json({ message: "Budget not found" });
     res.json(budget);
   });

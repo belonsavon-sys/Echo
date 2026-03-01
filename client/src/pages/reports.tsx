@@ -22,18 +22,18 @@ import {
   parseISO,
   startOfMonth,
   endOfMonth,
-  eachMonthOfInterval,
-  subMonths,
-  subYears,
   getDaysInMonth,
   differenceInDays,
-  isSameMonth,
-  isSameYear,
 } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { formatCurrency, formatNumber } from "@/lib/currency";
 import { TrendingUp, TrendingDown, Minus, DollarSign, Calendar, BarChart3, Target } from "lucide-react";
 import { fetchBudgetAggregate, type BudgetAggregateResponse } from "@/lib/budget-aggregate";
+import {
+  getTrendMonthsForPeriod,
+  resolveReportPeriodContext,
+  type ReportPeriodType,
+} from "@/lib/reports-period";
 
 const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#f97316"];
 const MONTH_OPTIONS = [
@@ -86,6 +86,7 @@ function ChangeIndicator({ current, previous, label }: { current: number; previo
 export default function ReportsPage() {
   const now = new Date();
   const currentYear = now.getFullYear();
+  const [periodType, setPeriodType] = useState<ReportPeriodType>("month");
   const [selectedBudgetId, setSelectedBudgetId] = useState<string>("all");
   const [selectedMonth, setSelectedMonth] = useState<string>(String(now.getMonth() + 1));
   const [selectedYear, setSelectedYear] = useState<string>(String(currentYear));
@@ -126,17 +127,20 @@ export default function ReportsPage() {
     return selectableBudgets[0]?.currency || "USD";
   }, [selectedBudgetId, selectableBudgets]);
 
-  const selectedPeriodDate = useMemo(
-    () => new Date(Number(selectedYear), Number(selectedMonth) - 1, 1),
-    [selectedMonth, selectedYear],
+  const selectedYearNumber = Number(selectedYear);
+  const selectedMonthNumber = Number(selectedMonth);
+  const periodContext = useMemo(
+    () => resolveReportPeriodContext(periodType, selectedYearNumber, selectedMonthNumber, now),
+    [periodType, selectedYearNumber, selectedMonthNumber],
   );
-  const selectedPeriodStart = startOfMonth(selectedPeriodDate);
-  const selectedPeriodEnd = endOfMonth(selectedPeriodDate);
-  const previousPeriodStart = startOfMonth(subMonths(selectedPeriodDate, 1));
-  const previousPeriodEnd = endOfMonth(subMonths(selectedPeriodDate, 1));
-  const samePeriodLastYearStart = startOfMonth(subYears(selectedPeriodDate, 1));
-  const samePeriodLastYearEnd = endOfMonth(subYears(selectedPeriodDate, 1));
-  const isCurrentPeriod = isSameYear(selectedPeriodDate, now) && isSameMonth(selectedPeriodDate, now);
+  const selectedPeriodDate = periodContext.selectedDate;
+  const selectedPeriodStart = periodContext.selectedStart;
+  const selectedPeriodEnd = periodContext.selectedEnd;
+  const previousPeriodStart = periodContext.previousStart;
+  const previousPeriodEnd = periodContext.previousEnd;
+  const samePeriodLastYearStart = periodContext.comparisonStart;
+  const samePeriodLastYearEnd = periodContext.comparisonEnd;
+  const isCurrentPeriod = periodContext.isCurrentPeriod;
 
   const filterByDateRange = (entries: Entry[], start: Date, end: Date) =>
     entries.filter((entry) => {
@@ -167,25 +171,38 @@ export default function ReportsPage() {
   const lastYearIncome = sumByType(samePeriodLastYearEntries, "income");
   const lastYearExpenses = sumByType(samePeriodLastYearEntries, "expense");
 
+  const selectedPeriodLabel = format(selectedPeriodStart, periodType === "year" ? "yyyy" : "MMM yyyy");
+  const previousPeriodLabel = format(previousPeriodStart, periodType === "year" ? "yyyy" : "MMM yyyy");
   const comparisonPeriodData = [
-    { period: format(previousPeriodStart, "MMM yyyy"), Income: previousIncome, Expenses: previousExpenses },
-    { period: format(selectedPeriodStart, "MMM yyyy"), Income: selectedIncome, Expenses: selectedExpenses },
+    { period: previousPeriodLabel, Income: previousIncome, Expenses: previousExpenses },
+    { period: selectedPeriodLabel, Income: selectedIncome, Expenses: selectedExpenses },
   ];
 
   const comparisonYearData = [
-    { period: format(samePeriodLastYearStart, "MMM yyyy"), Income: lastYearIncome, Expenses: lastYearExpenses },
-    { period: format(selectedPeriodStart, "MMM yyyy"), Income: selectedIncome, Expenses: selectedExpenses },
+    {
+      period: format(samePeriodLastYearStart, periodType === "year" ? "yyyy" : "MMM yyyy"),
+      Income: lastYearIncome,
+      Expenses: lastYearExpenses,
+    },
+    { period: selectedPeriodLabel, Income: selectedIncome, Expenses: selectedExpenses },
   ];
 
-  const hasLastYearData = samePeriodLastYearEntries.length > 0;
+  const hasLastYearData = periodType === "year" ? true : samePeriodLastYearEntries.length > 0;
 
   const dayOfMonth = now.getDate();
   const daysInMonth = getDaysInMonth(selectedPeriodDate);
-  const daysSoFar = isCurrentPeriod ? Math.max(1, differenceInDays(now, selectedPeriodStart) + 1) : daysInMonth;
+  const daysSoFar =
+    periodType === "month" && isCurrentPeriod
+      ? Math.max(1, differenceInDays(now, selectedPeriodStart) + 1)
+      : daysInMonth;
   const dailyAvgExpense = daysSoFar > 0 ? selectedExpenses / daysSoFar : 0;
   const dailyAvgIncome = daysSoFar > 0 ? selectedIncome / daysSoFar : 0;
   const predictedExpenses = dailyAvgExpense * daysInMonth;
   const predictedIncome = dailyAvgIncome * daysInMonth;
+  const averageSpending =
+    periodType === "year" ? selectedExpenses / 12 : dailyAvgExpense;
+  const averageSpendingLabel =
+    periodType === "year" ? "Avg Monthly Spending" : "Daily Avg Spending";
 
   const predictionBudgetIds = useMemo(() => {
     if (selectedBudgetId !== "all") {
@@ -203,6 +220,8 @@ export default function ReportsPage() {
   }, [selectedBudgetId, selectableBudgets, selectedPeriodEnd, selectedPeriodStart]);
 
   const categoryPredictions = useMemo(() => {
+    if (!periodContext.predictionsEnabled) return [];
+
     const scopedExpenseEntries = selectedPeriodEntries.filter(
       (entry) => entry.type === "expense" && predictionBudgetIds.has(entry.budgetId),
     );
@@ -240,6 +259,7 @@ export default function ReportsPage() {
     selectedPeriodEntries,
     allCategories,
     predictionBudgetIds,
+    periodContext.predictionsEnabled,
     daysSoFar,
     daysInMonth,
     selectedBudgetId,
@@ -355,13 +375,13 @@ export default function ReportsPage() {
       .slice(0, 5);
   }, [expenseEntries, allCategories]);
 
-  const last6Months = eachMonthOfInterval({
-    start: subMonths(selectedPeriodDate, 5),
-    end: selectedPeriodDate,
-  });
+  const trendMonths = useMemo(
+    () => getTrendMonthsForPeriod(periodType, selectedPeriodDate),
+    [periodType, selectedPeriodDate],
+  );
 
   const monthlyTrend = useMemo(() => {
-    return last6Months.map((month) => {
+    return trendMonths.map((month) => {
       const monthStart = startOfMonth(month);
       const monthEnd = endOfMonth(month);
       const monthEntries = filterByDateRange(allEntries, monthStart, monthEnd);
@@ -369,7 +389,7 @@ export default function ReportsPage() {
       const expenses = sumByType(monthEntries, "expense");
       return { month: format(month, "MMM"), Income: income, Expenses: expenses };
     });
-  }, [allEntries, last6Months]);
+  }, [allEntries, trendMonths]);
 
   if (selectableBudgets.length === 0) {
     return (
@@ -384,6 +404,16 @@ export default function ReportsPage() {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-base sm:text-lg font-semibold" data-testid="text-reports-title">Spending Reports</h1>
         <div className="flex items-center gap-2 flex-wrap">
+          <Select value={periodType} onValueChange={(value: ReportPeriodType) => setPeriodType(value)}>
+            <SelectTrigger className="w-[110px]" data-testid="select-report-period-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="month">Month</SelectItem>
+              <SelectItem value="year">Year</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Select value={selectedBudgetId} onValueChange={setSelectedBudgetId}>
             <SelectTrigger className="w-[160px] sm:w-[180px]" data-testid="select-report-budget">
               <SelectValue placeholder="Select budget" />
@@ -398,18 +428,20 @@ export default function ReportsPage() {
             </SelectContent>
           </Select>
 
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-[130px]" data-testid="select-report-month">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MONTH_OPTIONS.map((month) => (
-                <SelectItem key={month.value} value={month.value}>
-                  {month.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {periodType === "month" && (
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="w-[130px]" data-testid="select-report-month">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MONTH_OPTIONS.map((month) => (
+                  <SelectItem key={month.value} value={month.value}>
+                    {month.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           <Select value={selectedYear} onValueChange={setSelectedYear}>
             <SelectTrigger className="w-[95px]" data-testid="select-report-year">
@@ -444,9 +476,9 @@ export default function ReportsPage() {
         <Card className="p-3">
           <div className="flex items-center gap-2 mb-1">
             <Calendar className="w-4 h-4 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Daily Avg Spending</span>
+            <span className="text-xs text-muted-foreground">{averageSpendingLabel}</span>
           </div>
-          <p className="text-lg font-semibold" data-testid="stat-daily-avg">{formatCurrency(dailyAvgExpense, currency)}</p>
+          <p className="text-lg font-semibold" data-testid="stat-daily-avg">{formatCurrency(averageSpending, currency)}</p>
         </Card>
         <Card className="p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -464,9 +496,11 @@ export default function ReportsPage() {
 
       <div data-testid="section-comparison" className="space-y-4">
         <h2 className="text-sm font-semibold">Budget Comparison</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className={`grid grid-cols-1 ${periodType === "month" ? "lg:grid-cols-2" : ""} gap-4`}>
           <Card className="p-3 sm:p-4">
-            <h3 className="text-sm font-medium mb-2">Selected Period vs Previous Period</h3>
+            <h3 className="text-sm font-medium mb-2">
+              {periodType === "year" ? "Selected Year vs Previous Year" : "Selected Period vs Previous Period"}
+            </h3>
             <div className="overflow-x-auto">
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={comparisonPeriodData}>
@@ -486,32 +520,34 @@ export default function ReportsPage() {
             </div>
           </Card>
 
-          <Card className="p-3 sm:p-4">
-            <h3 className="text-sm font-medium mb-2">Selected Period vs Same Period Last Year</h3>
-            {hasLastYearData ? (
-              <>
-                <div className="overflow-x-auto">
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={comparisonYearData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="period" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => formatCurrency(value, currency)} />
-                      <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
-                      <Legend />
-                      <Bar dataKey="Income" fill="#10b981" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="Expenses" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="mt-2 space-y-1">
-                  <ChangeIndicator current={selectedExpenses} previous={lastYearExpenses} label="Expenses" />
-                  <ChangeIndicator current={selectedIncome} previous={lastYearIncome} label="Income" />
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-8">No data available for comparison</p>
-            )}
-          </Card>
+          {periodType === "month" && (
+            <Card className="p-3 sm:p-4">
+              <h3 className="text-sm font-medium mb-2">Selected Period vs Same Period Last Year</h3>
+              {hasLastYearData ? (
+                <>
+                  <div className="overflow-x-auto">
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={comparisonYearData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+                        <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => formatCurrency(value, currency)} />
+                        <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
+                        <Legend />
+                        <Bar dataKey="Income" fill="#10b981" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Expenses" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    <ChangeIndicator current={selectedExpenses} previous={lastYearExpenses} label="Expenses" />
+                    <ChangeIndicator current={selectedIncome} previous={lastYearIncome} label="Income" />
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-8">No data available for comparison</p>
+              )}
+            </Card>
+          )}
         </div>
       </div>
 
@@ -521,10 +557,12 @@ export default function ReportsPage() {
           Spending Predictions
         </h2>
 
-        {!isCurrentPeriod ? (
+        {!periodContext.predictionsEnabled ? (
           <Card className="p-3 sm:p-4">
             <p className="text-sm text-muted-foreground" data-testid="text-predictions-disabled">
-              Prediction disabled for historical/future period. Select the current month to view live predictions.
+              {periodType === "year"
+                ? "Prediction disabled for year view. Switch to month view to see live predictions."
+                : "Prediction disabled for historical/future period. Select the current month to view live predictions."}
             </p>
           </Card>
         ) : (
@@ -618,7 +656,7 @@ export default function ReportsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <Card className="p-3 sm:p-4" data-testid="section-category-breakdown">
-          <h2 className="text-sm font-semibold mb-3 sm:mb-4">Category Breakdown ({format(selectedPeriodStart, "MMM yyyy")})</h2>
+          <h2 className="text-sm font-semibold mb-3 sm:mb-4">Category Breakdown ({selectedPeriodLabel})</h2>
           {categorySpending.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No expense data for this period</p>
           ) : (
@@ -647,7 +685,7 @@ export default function ReportsPage() {
         </Card>
 
         <Card className="p-3 sm:p-4" data-testid="section-top-expenses">
-          <h2 className="text-sm font-semibold mb-3 sm:mb-4">Top 5 Biggest Spenders ({format(selectedPeriodStart, "MMM yyyy")})</h2>
+          <h2 className="text-sm font-semibold mb-3 sm:mb-4">Top 5 Biggest Spenders ({selectedPeriodLabel})</h2>
           {topExpenseSpenders.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No expenses in this period</p>
           ) : (
@@ -678,7 +716,9 @@ export default function ReportsPage() {
       </div>
 
       <Card className="p-3 sm:p-4">
-        <h2 className="text-sm font-semibold mb-3 sm:mb-4">Income vs Expenses Trend (6 months)</h2>
+        <h2 className="text-sm font-semibold mb-3 sm:mb-4">
+          {periodType === "year" ? `Income vs Expenses Trend (${selectedYear})` : "Income vs Expenses Trend (6 months)"}
+        </h2>
         <div className="overflow-x-auto">
           <ResponsiveContainer width="100%" height={250}>
             <LineChart data={monthlyTrend}>

@@ -269,6 +269,10 @@
     background: hsl(var(--background));
   }
 
+  #root {
+    overflow: hidden;
+  }
+
   * {
     @apply border-border;
   }

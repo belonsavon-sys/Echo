@@ -146,7 +146,7 @@ export default function ComparePage() {
   const budgetBLabel = budgetB?.name || "Budget B";
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
+    <div className="h-full overflow-auto p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="space-y-1">
           <label className="text-xs font-medium text-muted-foreground">Budget A</label>
