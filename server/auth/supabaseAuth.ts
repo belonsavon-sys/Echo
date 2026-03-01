@@ -2,7 +2,7 @@ import type { Express, NextFunction, Request, RequestHandler, Response } from "e
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { authStorage } from "./storage";
-import { db } from "../../db";
+import { db } from "../db";
 import { budgets, favorites, netWorthAccounts, savingsGoals, tags } from "@shared/schema";
 
 type AuthClaims = {
@@ -23,6 +23,15 @@ type AuthenticatedUser = {
 
 const LEGACY_USER_ID = "local-dev-user";
 const migratedLegacyOwners = new Set<string>();
+const MAX_PROFILE_SYNC_CACHE_SIZE = 5000;
+
+type SyncedUserProfile = {
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  profileImageUrl: string | null;
+};
+const syncedUserProfiles = new Map<string, SyncedUserProfile>();
 
 type SupabaseAuthConfig = {
   url: string;
@@ -52,6 +61,12 @@ function isLocalDevAuthEnabled(): boolean {
   return process.env.LOCAL_DEV_AUTH === "true";
 }
 
+function assertLocalDevAuthAllowed(): void {
+  if (process.env.NODE_ENV === "production" && isLocalDevAuthEnabled()) {
+    throw new Error("LOCAL_DEV_AUTH cannot be enabled when NODE_ENV=production.");
+  }
+}
+
 function getLocalDevClaims(): AuthClaims {
   const now = Math.floor(Date.now() / 1000);
   return {
@@ -75,6 +90,50 @@ function getBearerToken(req: Request): string | null {
   if (!scheme || !token) return null;
   if (scheme.toLowerCase() !== "bearer") return null;
   return token;
+}
+
+function rememberSyncedUserProfile(userId: string, profile: SyncedUserProfile): void {
+  if (syncedUserProfiles.has(userId)) {
+    syncedUserProfiles.delete(userId);
+  }
+  syncedUserProfiles.set(userId, profile);
+  if (syncedUserProfiles.size <= MAX_PROFILE_SYNC_CACHE_SIZE) return;
+
+  const oldestKey = syncedUserProfiles.keys().next().value;
+  if (oldestKey) syncedUserProfiles.delete(oldestKey);
+}
+
+function hasSyncedProfile(userId: string, profile: SyncedUserProfile): boolean {
+  const existing = syncedUserProfiles.get(userId);
+  if (!existing) return false;
+  return (
+    existing.email === profile.email &&
+    existing.firstName === profile.firstName &&
+    existing.lastName === profile.lastName &&
+    existing.profileImageUrl === profile.profileImageUrl
+  );
+}
+
+async function syncUserProfileIfChanged(claims: AuthClaims): Promise<void> {
+  const profile: SyncedUserProfile = {
+    email: claims.email,
+    firstName: claims.first_name,
+    lastName: claims.last_name,
+    profileImageUrl: claims.profile_image_url,
+  };
+
+  if (hasSyncedProfile(claims.sub, profile)) {
+    return;
+  }
+
+  await authStorage.upsertUser({
+    id: claims.sub,
+    email: claims.email,
+    firstName: claims.first_name,
+    lastName: claims.last_name,
+    profileImageUrl: claims.profile_image_url,
+  });
+  rememberSyncedUserProfile(claims.sub, profile);
 }
 
 async function countRowsForUser(userId: string): Promise<number> {
@@ -164,6 +223,8 @@ async function claimsFromToken(token: string): Promise<AuthClaims> {
 }
 
 async function attachAuthenticatedUser(req: Request): Promise<AuthenticatedUser | null> {
+  assertLocalDevAuthAllowed();
+
   if (isLocalDevAuthEnabled()) {
     const claims = getLocalDevClaims();
     const user: AuthenticatedUser = {
@@ -174,13 +235,7 @@ async function attachAuthenticatedUser(req: Request): Promise<AuthenticatedUser 
     };
     (req as any).user = user;
     (req as any).isAuthenticated = () => true;
-    await authStorage.upsertUser({
-      id: claims.sub,
-      email: claims.email,
-      firstName: claims.first_name,
-      lastName: claims.last_name,
-      profileImageUrl: claims.profile_image_url,
-    });
+    await syncUserProfileIfChanged(claims);
     return user;
   }
 
@@ -200,19 +255,15 @@ async function attachAuthenticatedUser(req: Request): Promise<AuthenticatedUser 
   (req as any).user = user;
   (req as any).isAuthenticated = () => true;
 
-  await authStorage.upsertUser({
-    id: claims.sub,
-    email: claims.email,
-    firstName: claims.first_name,
-    lastName: claims.last_name,
-    profileImageUrl: claims.profile_image_url,
-  });
+  await syncUserProfileIfChanged(claims);
 
   await migrateLegacyDataToUser(claims.sub);
   return user;
 }
 
 export async function setupAuth(_app: Express) {
+  assertLocalDevAuthAllowed();
+
   const { url } = getSupabaseAuthConfig();
   if (!isLocalDevAuthEnabled() && !url) {
     throw new Error("SUPABASE_URL (or VITE_SUPABASE_URL) must be set for authentication.");
@@ -235,3 +286,10 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     return res.status(status).json({ message: "Unauthorized" });
   }
 };
+
+export function __resetAuthCachesForTests() {
+  migratedLegacyOwners.clear();
+  syncedUserProfiles.clear();
+  jwtKeySet = null;
+  jwtKeySetIssuer = null;
+}

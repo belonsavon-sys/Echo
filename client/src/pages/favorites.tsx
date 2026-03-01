@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Favorite } from "@shared/schema";
+import type { Favorite, InsertFavorite } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,8 @@ import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Plus, Trash2, Edit2, X, Star } from "lucide-react";
 import { formatCurrency } from "@/lib/currency";
+
+type FavoritePayload = Omit<InsertFavorite, "userId">;
 
 export default function FavoritesPage() {
   const { toast } = useToast();
@@ -22,7 +24,7 @@ export default function FavoritesPage() {
   const { data: favorites = [], isLoading } = useQuery<Favorite[]>({ queryKey: ["/api/favorites"] });
 
   const createFavorite = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: FavoritePayload) => {
       const res = await apiRequest("POST", "/api/favorites", data);
       return res.json();
     },
@@ -34,7 +36,7 @@ export default function FavoritesPage() {
   });
 
   const updateFavorite = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+    mutationFn: async ({ id, data }: { id: number; data: Partial<FavoritePayload> }) => {
       const res = await apiRequest("PATCH", `/api/favorites/${id}`, data);
       return res.json();
     },

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Budget, NavigationPreferences } from "@shared/schema";
+import type { Budget, NavigationPreferences, InsertBudget } from "@shared/schema";
 import {
   Sidebar,
   SidebarContent,
@@ -46,6 +46,7 @@ interface AppSidebarProps {
 }
 
 const YEAR_FOLDER_PATTERN = /^\d{4}$/;
+type BudgetPayload = Omit<InsertBudget, "userId">;
 
 export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelectView }: AppSidebarProps) {
   const { user, logout, isLoggingOut } = useAuth();
@@ -56,6 +57,8 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
   const [newBudgetIsFolder, setNewBudgetIsFolder] = useState(false);
   const [newBudgetParentId, setNewBudgetParentId] = useState<string>("none");
   const [newBudgetCurrency, setNewBudgetCurrency] = useState("USD");
+  const [newBudgetOpeningBalance, setNewBudgetOpeningBalance] = useState("0");
+  const [newBudgetOpeningBalanceMode, setNewBudgetOpeningBalanceMode] = useState<"manual" | "carryover">("manual");
 
   const [showCloneDialog, setShowCloneDialog] = useState(false);
   const [cloneSourceBudget, setCloneSourceBudget] = useState<Budget | null>(null);
@@ -138,7 +141,7 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
   }, [budgets]);
 
   const createBudget = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: BudgetPayload) => {
       const res = await apiRequest("POST", "/api/budgets", data);
       return res.json();
     },
@@ -148,6 +151,8 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
       setNewBudgetName("");
       setNewBudgetIsFolder(false);
       setNewBudgetParentId("none");
+      setNewBudgetOpeningBalance("0");
+      setNewBudgetOpeningBalanceMode("manual");
       if (!budget.isFolder) {
         onSelectBudget(budget.id);
       }
@@ -251,6 +256,9 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
 
   function handleCreateBudget() {
     if (!newBudgetName) return;
+    const parsedOpeningBalance = Number(newBudgetOpeningBalance);
+    if (!Number.isFinite(parsedOpeningBalance)) return;
+
     createBudget.mutate({
       name: newBudgetName,
       period: newBudgetPeriod,
@@ -260,6 +268,8 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
       isFolder: newBudgetIsFolder,
       parentId: newBudgetParentId !== "none" ? Number(newBudgetParentId) : null,
       currency: newBudgetCurrency,
+      openingBalance: parsedOpeningBalance,
+      openingBalanceMode: newBudgetIsFolder ? "manual" : newBudgetOpeningBalanceMode,
     });
   }
 
@@ -422,7 +432,7 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
       <SidebarHeader className="px-4 py-3">
         <div className="flex items-center gap-2">
           <Wallet className="w-5 h-5 text-primary" />
-          <span className="text-base font-bold tracking-tight">Fudget</span>
+          <span className="text-base font-bold tracking-tight">Echo</span>
         </div>
         {user && (
           <div className="flex items-center gap-2 mt-2 px-1">
@@ -474,6 +484,8 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
                 setNewBudgetParentId("none");
                 setNewBudgetName("");
                 setNewBudgetCurrency("USD");
+                setNewBudgetOpeningBalance("0");
+                setNewBudgetOpeningBalanceMode("manual");
               }
             }}>
               <DialogTrigger asChild>
@@ -528,8 +540,28 @@ export function AppSidebar({ activeBudgetId, activeView, onSelectBudget, onSelec
                           ))}
                         </SelectContent>
                       </Select>
+                      <Select
+                        value={newBudgetOpeningBalanceMode}
+                        onValueChange={(value: "manual" | "carryover") => setNewBudgetOpeningBalanceMode(value)}
+                      >
+                        <SelectTrigger data-testid="select-budget-opening-mode">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="manual">Manual opening balance</SelectItem>
+                          <SelectItem value="carryover">Auto carryover</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </>
                   )}
+                  <Input
+                    placeholder="Opening balance"
+                    type="number"
+                    step="0.01"
+                    value={newBudgetOpeningBalance}
+                    onChange={(e) => setNewBudgetOpeningBalance(e.target.value)}
+                    data-testid="input-new-budget-opening-balance"
+                  />
                   {folderOptions.length > 0 && (
                     <Select value={newBudgetParentId} onValueChange={setNewBudgetParentId}>
                       <SelectTrigger data-testid="select-parent-folder">

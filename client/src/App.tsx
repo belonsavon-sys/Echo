@@ -24,6 +24,10 @@ import { Wallet, Layers, Loader2 } from "lucide-react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { useAuth } from "@/hooks/use-auth";
 import LandingPage from "@/pages/landing";
+import AuthCallbackPage from "@/pages/auth-callback";
+import { AppErrorBoundary } from "@/components/app-error-boundary";
+import { DevTools } from "@/components/dev/dev-tools";
+import DevRoutesPage from "@/pages/dev-routes";
 
 function useDocumentTitle(title: string) {
   useEffect(() => {
@@ -32,17 +36,17 @@ function useDocumentTitle(title: string) {
 }
 
 function DashboardView() {
-  useDocumentTitle("Dashboard | Fudget");
+  useDocumentTitle("Dashboard | Echo");
   return <DashboardPage />;
 }
 
 function BudgetView({ budgetId }: { budgetId: number }) {
-  useDocumentTitle("Budget | Fudget");
+  useDocumentTitle("Budget | Echo");
   const [categoriesOpen, setCategoriesOpen] = useState(false);
 
   return (
-    <div className="flex h-full">
-      <div className="flex-1 min-w-0">
+    <div className="flex h-full min-h-0">
+      <div className="flex-1 min-h-0 min-w-0">
         <BudgetPage budgetId={budgetId} categoriesButton={
           <Sheet open={categoriesOpen} onOpenChange={setCategoriesOpen}>
             <SheetTrigger asChild>
@@ -62,7 +66,7 @@ function BudgetView({ budgetId }: { budgetId: number }) {
           </Sheet>
         } />
       </div>
-      <div className="w-64 border-l overflow-auto p-3 hidden md:block">
+      <div className="hidden w-64 overflow-auto border-l p-3 md:block">
         <CategoriesSection budgetId={budgetId} />
       </div>
     </div>
@@ -70,51 +74,52 @@ function BudgetView({ budgetId }: { budgetId: number }) {
 }
 
 function ReportsView() {
-  useDocumentTitle("Reports | Fudget");
+  useDocumentTitle("Reports | Echo");
   return <ReportsPage />;
 }
 
 function AnnualView() {
-  useDocumentTitle("Annual Overview | Fudget");
+  useDocumentTitle("Annual Overview | Echo");
   return <AnnualOverviewPage />;
 }
 
 function GoalsView() {
-  useDocumentTitle("Savings Goals | Fudget");
+  useDocumentTitle("Savings Goals | Echo");
   return <SavingsGoalsPage />;
 }
 
 function WhatIfView() {
-  useDocumentTitle("What If | Fudget");
+  useDocumentTitle("What If | Echo");
   return <WhatIfPage />;
 }
 
 function HistoryView() {
-  useDocumentTitle("History | Fudget");
+  useDocumentTitle("History | Echo");
   return <HistoryPage />;
 }
 
 function TagsView() {
-  useDocumentTitle("Manage Tags | Fudget");
+  useDocumentTitle("Manage Tags | Echo");
   return <ManageTagsPage />;
 }
 
 function FavoritesView() {
-  useDocumentTitle("Favorites | Fudget");
+  useDocumentTitle("Favorites | Echo");
   return <FavoritesPage />;
 }
 
 function NetWorthView() {
-  useDocumentTitle("Net Worth | Fudget");
+  useDocumentTitle("Net Worth | Echo");
   return <NetWorthPage />;
 }
 
 function CompareView() {
-  useDocumentTitle("Compare | Fudget");
+  useDocumentTitle("Compare | Echo");
   return <ComparePage />;
 }
 
 function getPageTitle(location: string): string {
+  if (import.meta.env.DEV && location === "/dev/routes") return "Dev Routes";
   if (location === "/reports") return "Reports";
   if (location === "/annual") return "Annual Overview";
   if (location === "/goals") return "Savings Goals";
@@ -145,6 +150,7 @@ function AppContent() {
   const locationPath = location.split("?")[0];
 
   const activeView = (() => {
+    if (import.meta.env.DEV && locationPath === "/dev/routes") return "devroutes";
     if (locationPath === "/reports") return "reports";
     if (locationPath === "/annual") return "annual";
     if (locationPath === "/goals") return "goals";
@@ -182,19 +188,19 @@ function AppContent() {
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex h-screen w-full">
+      <div className="flex h-dvh min-h-0 w-full overflow-hidden">
         <AppSidebar
           activeBudgetId={activeBudgetId}
           activeView={activeView}
           onSelectBudget={handleSelectBudget}
           onSelectView={handleSelectView}
         />
-        <div className="flex flex-col flex-1 min-w-0">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <header className="flex items-center gap-2 px-3 py-2 border-b h-12 shrink-0">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <span className="text-sm font-medium text-muted-foreground" data-testid="text-page-title">{pageTitle}</span>
           </header>
-          <main className="flex-1 overflow-auto">
+          <main className="min-h-0 flex-1 overflow-hidden">
             <Switch location={locationPath}>
               <Route path="/" component={DashboardView} />
               <Route path="/budget/:id">
@@ -209,6 +215,7 @@ function AppContent() {
               <Route path="/tags" component={TagsView} />
               <Route path="/favorites" component={FavoritesView} />
               <Route path="/compare" component={CompareView} />
+              {import.meta.env.DEV ? <Route path="/dev/routes" component={DevRoutesPage} /> : null}
               <Route component={DashboardView} />
             </Switch>
           </main>
@@ -220,6 +227,12 @@ function AppContent() {
 
 function AuthGate() {
   const { isLoading, isAuthenticated } = useAuth();
+  const [location] = useLocation();
+  const locationPath = location.split("?")[0];
+
+  if (locationPath === "/auth/callback") {
+    return <AuthCallbackPage />;
+  }
 
   if (isLoading) {
     return (
@@ -241,8 +254,11 @@ function App() {
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <Toaster />
-          <AuthGate />
+          <AppErrorBoundary>
+            <Toaster />
+            <AuthGate />
+            <DevTools />
+          </AppErrorBoundary>
         </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>

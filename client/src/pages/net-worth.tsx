@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { NetWorthAccount } from "@shared/schema";
+import type { NetWorthAccount, InsertNetWorthAccount } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Plus, Edit2, Trash2, TrendingUp, TrendingDown, Landmark } from "lucide-react";
 import { CURRENCIES, formatCurrency } from "@/lib/currency";
+
+type NetWorthAccountPayload = Omit<InsertNetWorthAccount, "userId">;
 
 export default function NetWorthPage() {
   const { toast } = useToast();
@@ -31,7 +33,7 @@ export default function NetWorthPage() {
   });
 
   const createAccount = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: NetWorthAccountPayload) => {
       const res = await apiRequest("POST", "/api/net-worth-accounts", data);
       return res.json();
     },
@@ -43,7 +45,7 @@ export default function NetWorthPage() {
   });
 
   const updateAccount = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+    mutationFn: async ({ id, data }: { id: number; data: Partial<NetWorthAccountPayload> }) => {
       const res = await apiRequest("PATCH", `/api/net-worth-accounts/${id}`, data);
       return res.json();
     },

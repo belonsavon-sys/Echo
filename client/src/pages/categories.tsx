@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Category, Entry } from "@shared/schema";
+import type { Category, Entry, InsertCategory } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -31,7 +31,7 @@ export default function CategoriesSection({ budgetId }: CategoriesProps) {
   const { data: entries = [] } = useQuery<Entry[]>({ queryKey: ["/api/budgets", budgetId, "entries"] });
 
   const createCategory = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: InsertCategory) => {
       const res = await apiRequest("POST", "/api/categories", data);
       return res.json();
     },
@@ -45,7 +45,7 @@ export default function CategoriesSection({ budgetId }: CategoriesProps) {
   });
 
   const updateCategory = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+    mutationFn: async ({ id, data }: { id: number; data: Partial<InsertCategory> }) => {
       const res = await apiRequest("PATCH", `/api/categories/${id}`, data);
       return res.json();
     },

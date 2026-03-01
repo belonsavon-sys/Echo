@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* LIGHT MODE - Fudget-inspired clean minimal theme */
+/* LIGHT MODE - Echo clean minimal theme */
 :root {
   --button-outline: rgba(0,0,0, .10);
   --badge-outline: rgba(0,0,0, .05);
@@ -261,12 +261,23 @@
 }
 
 @layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    min-height: 100%;
+    background: hsl(var(--background));
+  }
+
   * {
     @apply border-border;
   }
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    margin: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 }
 

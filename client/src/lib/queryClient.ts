@@ -1,6 +1,21 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { getAccessToken } from "./supabase";
 
+const API_TRACE_EVENT_NAME = "echo:api-trace";
+
+type ApiTracePayload = {
+  method: string;
+  url: string;
+  status: number;
+  durationMs: number;
+  atIso: string;
+};
+
+function emitApiTrace(payload: ApiTracePayload): void {
+  if (!import.meta.env.DEV || typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent<ApiTracePayload>(API_TRACE_EVENT_NAME, { detail: payload }));
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -13,17 +28,38 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  const startedAt = performance.now();
   const accessToken = await getAccessToken();
   const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;
   }
 
-  const res = await fetch(url, {
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers,
+      body: data ? JSON.stringify(data) : undefined,
+      credentials: "include",
+    });
+  } catch (error) {
+    emitApiTrace({
+      method,
+      url,
+      status: 0,
+      durationMs: Math.round(performance.now() - startedAt),
+      atIso: new Date().toISOString(),
+    });
+    throw error;
+  }
+
+  emitApiTrace({
     method,
-    headers,
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
+    url,
+    status: res.status,
+    durationMs: Math.round(performance.now() - startedAt),
+    atIso: new Date().toISOString(),
   });
 
   await throwIfResNotOk(res);
@@ -36,15 +72,37 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    const startedAt = performance.now();
+    const url = queryKey.join("/") as string;
     const accessToken = await getAccessToken();
     const headers: Record<string, string> = {};
     if (accessToken) {
       headers.Authorization = `Bearer ${accessToken}`;
     }
 
-    const res = await fetch(queryKey.join("/") as string, {
-      headers,
-      credentials: "include",
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        headers,
+        credentials: "include",
+      });
+    } catch (error) {
+      emitApiTrace({
+        method: "GET",
+        url,
+        status: 0,
+        durationMs: Math.round(performance.now() - startedAt),
+        atIso: new Date().toISOString(),
+      });
+      throw error;
+    }
+
+    emitApiTrace({
+      method: "GET",
+      url,
+      status: res.status,
+      durationMs: Math.round(performance.now() - startedAt),
+      atIso: new Date().toISOString(),
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

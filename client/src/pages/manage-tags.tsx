@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Tag } from "@shared/schema";
+import type { Tag, InsertTag } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Trash2, Tag as TagIcon, Edit2, Check } from "lucide-react";
 
 const PRESET_COLORS = ["#8b5cf6", "#6366f1", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899", "#f97316", "#14b8a6", "#84cc16"];
+type TagPayload = Omit<InsertTag, "userId">;
 
 export default function ManageTagsPage() {
   const { toast } = useToast();
@@ -20,7 +21,7 @@ export default function ManageTagsPage() {
   const { data: tags = [] } = useQuery<Tag[]>({ queryKey: ["/api/tags"] });
 
   const createTag = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: TagPayload) => {
       const res = await apiRequest("POST", "/api/tags", data);
       return res.json();
     },
@@ -32,7 +33,7 @@ export default function ManageTagsPage() {
   });
 
   const updateTag = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+    mutationFn: async ({ id, data }: { id: number; data: Partial<TagPayload> }) => {
       const res = await apiRequest("PATCH", `/api/tags/${id}`, data);
       return res.json();
     },

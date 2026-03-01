@@ -1,20 +1,55 @@
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { Budget, Entry, Category } from "@shared/schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState, useMemo } from "react";
 import {
-  PieChart, Pie, Cell, BarChart, Bar, LineChart, Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
 } from "recharts";
 import {
-  format, parseISO, startOfMonth, endOfMonth, eachMonthOfInterval,
-  subMonths, subYears, getDaysInMonth, differenceInDays,
+  format,
+  parseISO,
+  startOfMonth,
+  endOfMonth,
+  eachMonthOfInterval,
+  subMonths,
+  subYears,
+  getDaysInMonth,
+  differenceInDays,
+  isSameMonth,
+  isSameYear,
 } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { formatCurrency, formatNumber } from "@/lib/currency";
 import { TrendingUp, TrendingDown, Minus, DollarSign, Calendar, BarChart3, Target } from "lucide-react";
+import { fetchBudgetAggregate, type BudgetAggregateResponse } from "@/lib/budget-aggregate";
 
 const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#f97316"];
+const MONTH_OPTIONS = [
+  { value: "1", label: "January" },
+  { value: "2", label: "February" },
+  { value: "3", label: "March" },
+  { value: "4", label: "April" },
+  { value: "5", label: "May" },
+  { value: "6", label: "June" },
+  { value: "7", label: "July" },
+  { value: "8", label: "August" },
+  { value: "9", label: "September" },
+  { value: "10", label: "October" },
+  { value: "11", label: "November" },
+  { value: "12", label: "December" },
+];
 
 function pctChange(current: number, previous: number): { value: number; label: string } {
   if (previous === 0 && current === 0) return { value: 0, label: "No change" };
@@ -33,7 +68,15 @@ function ChangeIndicator({ current, previous, label }: { current: number; previo
       {isUp && <TrendingUp className="w-3.5 h-3.5 text-red-500" />}
       {isDown && <TrendingDown className="w-3.5 h-3.5 text-emerald-500" />}
       {isNeutral && <Minus className="w-3.5 h-3.5 text-muted-foreground" />}
-      <span className={isUp ? "text-red-500 dark:text-red-400" : isDown ? "text-emerald-500 dark:text-emerald-400" : "text-muted-foreground"}>
+      <span
+        className={
+          isUp
+            ? "text-red-500 dark:text-red-400"
+            : isDown
+              ? "text-emerald-500 dark:text-emerald-400"
+              : "text-muted-foreground"
+        }
+      >
         {label} {isUp ? "up" : isDown ? "down" : ""} {change.label} from {isNeutral ? "before" : "previous period"}
       </span>
     </div>
@@ -41,38 +84,33 @@ function ChangeIndicator({ current, previous, label }: { current: number; previo
 }
 
 export default function ReportsPage() {
+  const now = new Date();
+  const currentYear = now.getFullYear();
   const [selectedBudgetId, setSelectedBudgetId] = useState<string>("all");
+  const [selectedMonth, setSelectedMonth] = useState<string>(String(now.getMonth() + 1));
+  const [selectedYear, setSelectedYear] = useState<string>(String(currentYear));
   const { data: budgets = [] } = useQuery<Budget[]>({ queryKey: ["/api/budgets"] });
-  const selectableBudgets = budgets.filter((b) => !b.isFolder);
+  const selectableBudgets = budgets.filter((budget) => !budget.isFolder);
 
   const selectedBudgetIds = useMemo(() => {
-    if (selectedBudgetId === "all") return selectableBudgets.map(b => b.id);
-    const id = parseInt(selectedBudgetId);
-    if (isNaN(id)) return [];
-    return selectableBudgets.some((b) => b.id === id) ? [id] : [];
+    if (selectedBudgetId === "all") return selectableBudgets.map((budget) => budget.id);
+    const parsed = Number(selectedBudgetId);
+    if (!Number.isInteger(parsed)) return [];
+    return selectableBudgets.some((budget) => budget.id === parsed) ? [parsed] : [];
   }, [selectedBudgetId, selectableBudgets]);
 
-  const entriesResults = useQueries({
-    queries: selectedBudgetIds.map(id => ({
-      queryKey: ["/api/budgets", id, "entries"],
-      enabled: id > 0,
-    })),
+  const { data: aggregate = { entries: [], categories: [], history: [] } } = useQuery<BudgetAggregateResponse>({
+    queryKey: ["/api/budgets/aggregate", "reports", selectedBudgetIds.join(",")],
+    enabled: selectedBudgetIds.length > 0,
+    queryFn: () =>
+      fetchBudgetAggregate(selectedBudgetIds, {
+        entries: true,
+        categories: true,
+      }),
   });
 
-  const categoriesResults = useQueries({
-    queries: selectedBudgetIds.map(id => ({
-      queryKey: ["/api/budgets", id, "categories"],
-      enabled: id > 0,
-    })),
-  });
-
-  const allEntries = useMemo(() => {
-    return entriesResults.flatMap(q => (q.data as Entry[]) || []);
-  }, [entriesResults]);
-
-  const allCategories = useMemo(() => {
-    return categoriesResults.flatMap(q => (q.data as Category[]) || []);
-  }, [categoriesResults]);
+  const allEntries = useMemo(() => aggregate.entries, [aggregate.entries]);
+  const allCategories = useMemo(() => aggregate.categories, [aggregate.categories]);
 
   const budgetNameById = useMemo(() => {
     const map = new Map<number, string>();
@@ -82,113 +120,147 @@ export default function ReportsPage() {
 
   const currency = useMemo(() => {
     if (selectedBudgetId !== "all") {
-      const b = selectableBudgets.find(b => b.id === parseInt(selectedBudgetId));
-      return b?.currency || "USD";
+      const selected = selectableBudgets.find((budget) => budget.id === Number(selectedBudgetId));
+      return selected?.currency || "USD";
     }
     return selectableBudgets[0]?.currency || "USD";
   }, [selectedBudgetId, selectableBudgets]);
 
-  const now = new Date();
-  const thisMonthStart = startOfMonth(now);
-  const thisMonthEnd = endOfMonth(now);
-  const lastMonthStart = startOfMonth(subMonths(now, 1));
-  const lastMonthEnd = endOfMonth(subMonths(now, 1));
-  const sameMonthLastYearStart = startOfMonth(subYears(now, 1));
-  const sameMonthLastYearEnd = endOfMonth(subYears(now, 1));
+  const selectedPeriodDate = useMemo(
+    () => new Date(Number(selectedYear), Number(selectedMonth) - 1, 1),
+    [selectedMonth, selectedYear],
+  );
+  const selectedPeriodStart = startOfMonth(selectedPeriodDate);
+  const selectedPeriodEnd = endOfMonth(selectedPeriodDate);
+  const previousPeriodStart = startOfMonth(subMonths(selectedPeriodDate, 1));
+  const previousPeriodEnd = endOfMonth(subMonths(selectedPeriodDate, 1));
+  const samePeriodLastYearStart = startOfMonth(subYears(selectedPeriodDate, 1));
+  const samePeriodLastYearEnd = endOfMonth(subYears(selectedPeriodDate, 1));
+  const isCurrentPeriod = isSameYear(selectedPeriodDate, now) && isSameMonth(selectedPeriodDate, now);
 
   const filterByDateRange = (entries: Entry[], start: Date, end: Date) =>
-    entries.filter(e => {
-      const d = parseISO(e.date);
-      return d >= start && d <= end;
+    entries.filter((entry) => {
+      const dateValue = parseISO(entry.date);
+      return dateValue >= start && dateValue <= end;
     });
 
-  const thisMonthEntries = useMemo(() => filterByDateRange(allEntries, thisMonthStart, thisMonthEnd), [allEntries]);
-  const lastMonthEntries = useMemo(() => filterByDateRange(allEntries, lastMonthStart, lastMonthEnd), [allEntries]);
-  const sameMonthLastYearEntries = useMemo(() => filterByDateRange(allEntries, sameMonthLastYearStart, sameMonthLastYearEnd), [allEntries]);
+  const selectedPeriodEntries = useMemo(
+    () => filterByDateRange(allEntries, selectedPeriodStart, selectedPeriodEnd),
+    [allEntries, selectedPeriodStart, selectedPeriodEnd],
+  );
+  const previousPeriodEntries = useMemo(
+    () => filterByDateRange(allEntries, previousPeriodStart, previousPeriodEnd),
+    [allEntries, previousPeriodStart, previousPeriodEnd],
+  );
+  const samePeriodLastYearEntries = useMemo(
+    () => filterByDateRange(allEntries, samePeriodLastYearStart, samePeriodLastYearEnd),
+    [allEntries, samePeriodLastYearStart, samePeriodLastYearEnd],
+  );
 
-  const sumByType = (entries: Entry[], type: string) => entries.filter(e => e.type === type).reduce((s, e) => s + e.amount, 0);
+  const sumByType = (entries: Entry[], type: string) =>
+    entries.filter((entry) => entry.type === type).reduce((sum, entry) => sum + entry.amount, 0);
 
-  const thisMonthIncome = sumByType(thisMonthEntries, "income");
-  const thisMonthExpenses = sumByType(thisMonthEntries, "expense");
-  const lastMonthIncome = sumByType(lastMonthEntries, "income");
-  const lastMonthExpenses = sumByType(lastMonthEntries, "expense");
-  const lastYearIncome = sumByType(sameMonthLastYearEntries, "income");
-  const lastYearExpenses = sumByType(sameMonthLastYearEntries, "expense");
+  const selectedIncome = sumByType(selectedPeriodEntries, "income");
+  const selectedExpenses = sumByType(selectedPeriodEntries, "expense");
+  const previousIncome = sumByType(previousPeriodEntries, "income");
+  const previousExpenses = sumByType(previousPeriodEntries, "expense");
+  const lastYearIncome = sumByType(samePeriodLastYearEntries, "income");
+  const lastYearExpenses = sumByType(samePeriodLastYearEntries, "expense");
 
-  const comparisonMonthData = [
-    { period: "Last Month", Income: lastMonthIncome, Expenses: lastMonthExpenses },
-    { period: "This Month", Income: thisMonthIncome, Expenses: thisMonthExpenses },
+  const comparisonPeriodData = [
+    { period: format(previousPeriodStart, "MMM yyyy"), Income: previousIncome, Expenses: previousExpenses },
+    { period: format(selectedPeriodStart, "MMM yyyy"), Income: selectedIncome, Expenses: selectedExpenses },
   ];
 
   const comparisonYearData = [
-    { period: format(sameMonthLastYearStart, "MMM yyyy"), Income: lastYearIncome, Expenses: lastYearExpenses },
-    { period: format(thisMonthStart, "MMM yyyy"), Income: thisMonthIncome, Expenses: thisMonthExpenses },
+    { period: format(samePeriodLastYearStart, "MMM yyyy"), Income: lastYearIncome, Expenses: lastYearExpenses },
+    { period: format(selectedPeriodStart, "MMM yyyy"), Income: selectedIncome, Expenses: selectedExpenses },
   ];
 
-  const hasLastYearData = sameMonthLastYearEntries.length > 0;
+  const hasLastYearData = samePeriodLastYearEntries.length > 0;
 
   const dayOfMonth = now.getDate();
-  const daysInMonth = getDaysInMonth(now);
-  const daysSoFar = Math.max(1, differenceInDays(now, thisMonthStart) + 1);
-  const dailyAvgExpense = thisMonthExpenses / daysSoFar;
-  const dailyAvgIncome = thisMonthIncome / daysSoFar;
+  const daysInMonth = getDaysInMonth(selectedPeriodDate);
+  const daysSoFar = isCurrentPeriod ? Math.max(1, differenceInDays(now, selectedPeriodStart) + 1) : daysInMonth;
+  const dailyAvgExpense = daysSoFar > 0 ? selectedExpenses / daysSoFar : 0;
+  const dailyAvgIncome = daysSoFar > 0 ? selectedIncome / daysSoFar : 0;
   const predictedExpenses = dailyAvgExpense * daysInMonth;
   const predictedIncome = dailyAvgIncome * daysInMonth;
 
   const predictionBudgetIds = useMemo(() => {
     if (selectedBudgetId !== "all") {
-      const id = parseInt(selectedBudgetId);
+      const id = Number(selectedBudgetId);
       return new Set<number>(Number.isInteger(id) ? [id] : []);
     }
 
-    const activeInCurrentMonth = selectableBudgets.filter((budget) => {
+    const activeInSelectedMonth = selectableBudgets.filter((budget) => {
       const start = parseISO(budget.startDate);
       const end = budget.endDate ? parseISO(budget.endDate) : null;
-      return start <= thisMonthEnd && (!end || end >= thisMonthStart);
+      return start <= selectedPeriodEnd && (!end || end >= selectedPeriodStart);
     });
-    return new Set<number>(activeInCurrentMonth.map((budget) => budget.id));
-  }, [selectedBudgetId, selectableBudgets, thisMonthStart, thisMonthEnd]);
+
+    return new Set<number>(activeInSelectedMonth.map((budget) => budget.id));
+  }, [selectedBudgetId, selectableBudgets, selectedPeriodEnd, selectedPeriodStart]);
 
   const categoryPredictions = useMemo(() => {
-    const scopedExpenseEntries = thisMonthEntries.filter(
+    const scopedExpenseEntries = selectedPeriodEntries.filter(
       (entry) => entry.type === "expense" && predictionBudgetIds.has(entry.budgetId),
     );
+
     return allCategories
-      .filter((category) => predictionBudgetIds.has(category.budgetId) && !!category.budgetLimit && category.budgetLimit > 0)
-      .map(cat => {
-        const spent = scopedExpenseEntries.filter(entry => entry.categoryId === cat.id).reduce((sum, entry) => sum + entry.amount, 0);
+      .filter(
+        (category) => predictionBudgetIds.has(category.budgetId) && !!category.budgetLimit && category.budgetLimit > 0,
+      )
+      .map((category) => {
+        const spent = scopedExpenseEntries
+          .filter((entry) => entry.categoryId === category.id)
+          .reduce((sum, entry) => sum + entry.amount, 0);
         if (spent <= 0) return null;
+
         const predicted = (spent / daysSoFar) * daysInMonth;
-        const limit = cat.budgetLimit!;
+        const limit = category.budgetLimit!;
         const status = predicted <= limit * 0.9 ? "under" : predicted <= limit * 1.1 ? "on-track" : "over";
         const label =
           selectedBudgetId === "all"
-            ? `${cat.name} (${budgetNameById.get(cat.budgetId) || "Budget"})`
-            : cat.name;
-        return { name: label, spent, predicted, limit, status, color: cat.color };
+            ? `${category.name} (${budgetNameById.get(category.budgetId) || "Budget"})`
+            : category.name;
+
+        return {
+          name: label,
+          spent,
+          predicted,
+          limit,
+          status,
+          color: category.color,
+        };
       })
       .filter((category): category is NonNullable<typeof category> => category !== null)
-      .sort((a, b) => b.predicted - a.predicted);
-  }, [thisMonthEntries, allCategories, predictionBudgetIds, daysSoFar, daysInMonth, selectedBudgetId, budgetNameById]);
+      .sort((left, right) => right.predicted - left.predicted);
+  }, [
+    selectedPeriodEntries,
+    allCategories,
+    predictionBudgetIds,
+    daysSoFar,
+    daysInMonth,
+    selectedBudgetId,
+    budgetNameById,
+  ]);
 
-  const expenseEntries = allEntries.filter(e => e.type === "expense");
+  const expenseEntries = selectedPeriodEntries.filter((entry) => entry.type === "expense");
 
   const categorySpending = useMemo(() => {
-    const thisMonthExpenseEntries = thisMonthEntries.filter((entry) => entry.type === "expense");
     const categoryById = new Map<number, Category>();
     allCategories.forEach((category) => {
       categoryById.set(category.id, category);
     });
 
     const aggregated = new Map<string, { name: string; value: number; color: string }>();
-    for (const entry of thisMonthExpenseEntries) {
+    for (const entry of expenseEntries) {
       if (!entry.categoryId) continue;
       const category = categoryById.get(entry.categoryId);
       if (!category) continue;
 
-      const key = selectedBudgetId === "all"
-        ? category.name.trim().toLowerCase()
-        : String(category.id);
+      const key = selectedBudgetId === "all" ? category.name.trim().toLowerCase() : String(category.id);
       const existing = aggregated.get(key);
       if (existing) {
         existing.value += entry.amount;
@@ -203,16 +275,18 @@ export default function ReportsPage() {
 
     const spending = Array.from(aggregated.values())
       .filter((category) => category.value > 0)
-      .sort((a, b) => b.value - a.value);
+      .sort((left, right) => right.value - left.value);
 
-    const uncategorized = thisMonthExpenseEntries
+    const uncategorized = expenseEntries
       .filter((entry) => !entry.categoryId)
       .reduce((sum, entry) => sum + entry.amount, 0);
+
     if (uncategorized > 0) {
       spending.push({ name: "Uncategorized", value: uncategorized, color: "#94a3b8" });
     }
+
     return spending;
-  }, [thisMonthEntries, allCategories, selectedBudgetId]);
+  }, [expenseEntries, allCategories, selectedBudgetId]);
 
   const topExpenseSpenders = useMemo(() => {
     const categoryById = new Map<number, string>();
@@ -277,17 +351,17 @@ export default function ReportsPage() {
           primaryCategory,
         };
       })
-      .sort((a, b) => b.total - a.total)
+      .sort((left, right) => right.total - left.total)
       .slice(0, 5);
   }, [expenseEntries, allCategories]);
 
   const last6Months = eachMonthOfInterval({
-    start: subMonths(now, 5),
-    end: now,
+    start: subMonths(selectedPeriodDate, 5),
+    end: selectedPeriodDate,
   });
 
   const monthlyTrend = useMemo(() => {
-    return last6Months.map(month => {
+    return last6Months.map((month) => {
       const monthStart = startOfMonth(month);
       const monthEnd = endOfMonth(month);
       const monthEntries = filterByDateRange(allEntries, monthStart, monthEnd);
@@ -295,7 +369,7 @@ export default function ReportsPage() {
       const expenses = sumByType(monthEntries, "expense");
       return { month: format(month, "MMM"), Income: income, Expenses: expenses };
     });
-  }, [allEntries]);
+  }, [allEntries, last6Months]);
 
   if (selectableBudgets.length === 0) {
     return (
@@ -309,33 +383,63 @@ export default function ReportsPage() {
     <div className="h-full overflow-auto px-3 sm:px-4 py-3 sm:py-4 space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-base sm:text-lg font-semibold" data-testid="text-reports-title">Spending Reports</h1>
-        <Select value={selectedBudgetId} onValueChange={setSelectedBudgetId}>
-          <SelectTrigger className="w-[160px] sm:w-[180px]" data-testid="select-report-budget">
-            <SelectValue placeholder="Select budget" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Budgets</SelectItem>
-            {selectableBudgets.map(b => (
-              <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={selectedBudgetId} onValueChange={setSelectedBudgetId}>
+            <SelectTrigger className="w-[160px] sm:w-[180px]" data-testid="select-report-budget">
+              <SelectValue placeholder="Select budget" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Budgets</SelectItem>
+              {selectableBudgets.map((budget) => (
+                <SelectItem key={budget.id} value={budget.id.toString()}>
+                  {budget.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <SelectTrigger className="w-[130px]" data-testid="select-report-month">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MONTH_OPTIONS.map((month) => (
+                <SelectItem key={month.value} value={month.value}>
+                  {month.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={selectedYear} onValueChange={setSelectedYear}>
+            <SelectTrigger className="w-[95px]" data-testid="select-report-year">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((year) => (
+                <SelectItem key={year} value={String(year)}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="p-3">
           <div className="flex items-center gap-2 mb-1">
             <DollarSign className="w-4 h-4 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">This Month Income</span>
+            <span className="text-xs text-muted-foreground">Selected Income</span>
           </div>
-          <p className="text-lg font-semibold" data-testid="stat-this-month-income">{formatCurrency(thisMonthIncome, currency)}</p>
+          <p className="text-lg font-semibold" data-testid="stat-selected-income">{formatCurrency(selectedIncome, currency)}</p>
         </Card>
         <Card className="p-3">
           <div className="flex items-center gap-2 mb-1">
             <DollarSign className="w-4 h-4 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">This Month Expenses</span>
+            <span className="text-xs text-muted-foreground">Selected Expenses</span>
           </div>
-          <p className="text-lg font-semibold" data-testid="stat-this-month-expenses">{formatCurrency(thisMonthExpenses, currency)}</p>
+          <p className="text-lg font-semibold" data-testid="stat-selected-expenses">{formatCurrency(selectedExpenses, currency)}</p>
         </Card>
         <Card className="p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -347,10 +451,13 @@ export default function ReportsPage() {
         <Card className="p-3">
           <div className="flex items-center gap-2 mb-1">
             <BarChart3 className="w-4 h-4 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Net This Month</span>
+            <span className="text-xs text-muted-foreground">Net Selected</span>
           </div>
-          <p className={`text-lg font-semibold ${thisMonthIncome - thisMonthExpenses >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`} data-testid="stat-net">
-            {formatCurrency(thisMonthIncome - thisMonthExpenses, currency)}
+          <p
+            className={`text-lg font-semibold ${selectedIncome - selectedExpenses >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
+            data-testid="stat-net"
+          >
+            {formatCurrency(selectedIncome - selectedExpenses, currency)}
           </p>
         </Card>
       </div>
@@ -359,13 +466,13 @@ export default function ReportsPage() {
         <h2 className="text-sm font-semibold">Budget Comparison</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card className="p-3 sm:p-4">
-            <h3 className="text-sm font-medium mb-2">This Month vs Last Month</h3>
+            <h3 className="text-sm font-medium mb-2">Selected Period vs Previous Period</h3>
             <div className="overflow-x-auto">
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={comparisonMonthData}>
+                <BarChart data={comparisonPeriodData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="period" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatCurrency(v, currency)} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => formatCurrency(value, currency)} />
                   <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
                   <Legend />
                   <Bar dataKey="Income" fill="#10b981" radius={[4, 4, 0, 0]} />
@@ -374,13 +481,13 @@ export default function ReportsPage() {
               </ResponsiveContainer>
             </div>
             <div className="mt-2 space-y-1">
-              <ChangeIndicator current={thisMonthExpenses} previous={lastMonthExpenses} label="Expenses" />
-              <ChangeIndicator current={thisMonthIncome} previous={lastMonthIncome} label="Income" />
+              <ChangeIndicator current={selectedExpenses} previous={previousExpenses} label="Expenses" />
+              <ChangeIndicator current={selectedIncome} previous={previousIncome} label="Income" />
             </div>
           </Card>
 
           <Card className="p-3 sm:p-4">
-            <h3 className="text-sm font-medium mb-2">This Month vs Same Month Last Year</h3>
+            <h3 className="text-sm font-medium mb-2">Selected Period vs Same Period Last Year</h3>
             {hasLastYearData ? (
               <>
                 <div className="overflow-x-auto">
@@ -388,7 +495,7 @@ export default function ReportsPage() {
                     <BarChart data={comparisonYearData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis dataKey="period" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatCurrency(v, currency)} />
+                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => formatCurrency(value, currency)} />
                       <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
                       <Legend />
                       <Bar dataKey="Income" fill="#10b981" radius={[4, 4, 0, 0]} />
@@ -397,8 +504,8 @@ export default function ReportsPage() {
                   </ResponsiveContainer>
                 </div>
                 <div className="mt-2 space-y-1">
-                  <ChangeIndicator current={thisMonthExpenses} previous={lastYearExpenses} label="Expenses" />
-                  <ChangeIndicator current={thisMonthIncome} previous={lastYearIncome} label="Income" />
+                  <ChangeIndicator current={selectedExpenses} previous={lastYearExpenses} label="Expenses" />
+                  <ChangeIndicator current={selectedIncome} previous={lastYearIncome} label="Income" />
                 </div>
               </>
             ) : (
@@ -413,83 +520,107 @@ export default function ReportsPage() {
           <Target className="w-4 h-4" />
           Spending Predictions
         </h2>
-        <Card className="p-3 sm:p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Predicted Month-End Expenses</p>
-              <p className="text-lg font-semibold" data-testid="predicted-expenses">{formatCurrency(predictedExpenses, currency)}</p>
-              <p className="text-xs text-muted-foreground">Based on {daysSoFar} of {daysInMonth} days</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Predicted Month-End Income</p>
-              <p className="text-lg font-semibold" data-testid="predicted-income">{formatCurrency(predictedIncome, currency)}</p>
-              <p className="text-xs text-muted-foreground">Linear extrapolation from current trend</p>
-            </div>
-          </div>
-          <div className="mb-2">
-            <div className="flex items-center justify-between gap-2 text-xs mb-1 flex-wrap">
-              <span className="text-muted-foreground">Month progress</span>
-              <span className="font-medium">{dayOfMonth} / {daysInMonth} days</span>
-            </div>
-            <div className="h-2 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full bg-indigo-500 transition-all"
-                style={{ width: `${(dayOfMonth / daysInMonth) * 100}%` }}
-              />
-            </div>
-          </div>
 
-          {categoryPredictions.length > 0 && (
-            <div className="mt-4 space-y-3">
-              <p className="text-xs font-medium text-muted-foreground">Category Budget Projections</p>
-              {categoryPredictions.map((cat, i) => {
-                const predictedPct = cat.limit > 0 ? Math.min(150, (cat.predicted / cat.limit) * 100) : 0;
-                const currentPct = cat.limit > 0 ? Math.min(100, (cat.spent / cat.limit) * 100) : 0;
-                return (
-                  <div key={i}>
-                    <div className="flex items-center justify-between gap-2 text-xs mb-1 flex-wrap">
-                      <span className="font-medium">{cat.name}</span>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-muted-foreground">
-                          {formatCurrency(cat.spent, currency)} spent / {formatCurrency(cat.limit, currency)} budget
-                        </span>
-                        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
-                          cat.status === "under" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" :
-                          cat.status === "on-track" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
-                          "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                        }`} data-testid={`prediction-status-${i}`}>
-                          {cat.status === "under" ? "Under budget" : cat.status === "on-track" ? "On track" : "Over budget"}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden relative">
-                      <div
-                        className="h-full rounded-full bg-indigo-400/50 transition-all absolute top-0 left-0"
-                        style={{ width: `${Math.min(100, predictedPct)}%` }}
-                      />
-                      <div
-                        className={`h-full rounded-full transition-all absolute top-0 left-0 ${
-                          cat.status === "over" ? "bg-red-500" : cat.status === "on-track" ? "bg-amber-500" : "bg-emerald-500"
-                        }`}
-                        style={{ width: `${currentPct}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Projected: {formatCurrency(cat.predicted, currency)}
-                    </p>
-                  </div>
-                );
-              })}
+        {!isCurrentPeriod ? (
+          <Card className="p-3 sm:p-4">
+            <p className="text-sm text-muted-foreground" data-testid="text-predictions-disabled">
+              Prediction disabled for historical/future period. Select the current month to view live predictions.
+            </p>
+          </Card>
+        ) : (
+          <Card className="p-3 sm:p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Predicted Month-End Expenses</p>
+                <p className="text-lg font-semibold" data-testid="predicted-expenses">{formatCurrency(predictedExpenses, currency)}</p>
+                <p className="text-xs text-muted-foreground">Based on {daysSoFar} of {daysInMonth} days</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Predicted Month-End Income</p>
+                <p className="text-lg font-semibold" data-testid="predicted-income">{formatCurrency(predictedIncome, currency)}</p>
+                <p className="text-xs text-muted-foreground">Linear extrapolation from current trend</p>
+              </div>
             </div>
-          )}
-        </Card>
+
+            <div className="mb-2">
+              <div className="flex items-center justify-between gap-2 text-xs mb-1 flex-wrap">
+                <span className="text-muted-foreground">Month progress</span>
+                <span className="font-medium">{dayOfMonth} / {daysInMonth} days</span>
+              </div>
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-indigo-500 transition-all"
+                  style={{ width: `${(dayOfMonth / daysInMonth) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            {categoryPredictions.length > 0 && (
+              <div className="mt-4 space-y-3">
+                <p className="text-xs font-medium text-muted-foreground">Category Budget Projections</p>
+                {categoryPredictions.map((category, index) => {
+                  const predictedPct = category.limit > 0 ? Math.min(150, (category.predicted / category.limit) * 100) : 0;
+                  const currentPct = category.limit > 0 ? Math.min(100, (category.spent / category.limit) * 100) : 0;
+
+                  return (
+                    <div key={index}>
+                      <div className="flex items-center justify-between gap-2 text-xs mb-1 flex-wrap">
+                        <span className="font-medium">{category.name}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-muted-foreground">
+                            {formatCurrency(category.spent, currency)} spent / {formatCurrency(category.limit, currency)} budget
+                          </span>
+                          <span
+                            className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
+                              category.status === "under"
+                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                : category.status === "on-track"
+                                  ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                                  : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                            }`}
+                            data-testid={`prediction-status-${index}`}
+                          >
+                            {category.status === "under"
+                              ? "Under budget"
+                              : category.status === "on-track"
+                                ? "On track"
+                                : "Over budget"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="h-2 bg-muted rounded-full overflow-hidden relative">
+                        <div
+                          className="h-full rounded-full bg-indigo-400/50 transition-all absolute top-0 left-0"
+                          style={{ width: `${Math.min(100, predictedPct)}%` }}
+                        />
+                        <div
+                          className={`h-full rounded-full transition-all absolute top-0 left-0 ${
+                            category.status === "over"
+                              ? "bg-red-500"
+                              : category.status === "on-track"
+                                ? "bg-amber-500"
+                                : "bg-emerald-500"
+                          }`}
+                          style={{ width: `${currentPct}%` }}
+                        />
+                      </div>
+
+                      <p className="text-xs text-muted-foreground mt-0.5">Projected: {formatCurrency(category.predicted, currency)}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <Card className="p-3 sm:p-4" data-testid="section-category-breakdown">
-          <h2 className="text-sm font-semibold mb-3 sm:mb-4">Category Breakdown (This Month)</h2>
+          <h2 className="text-sm font-semibold mb-3 sm:mb-4">Category Breakdown ({format(selectedPeriodStart, "MMM yyyy")})</h2>
           {categorySpending.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No expense data yet</p>
+            <p className="text-sm text-muted-foreground text-center py-8">No expense data for this period</p>
           ) : (
             <div className="flex items-center justify-center overflow-x-auto">
               <ResponsiveContainer width="100%" height={250}>
@@ -516,29 +647,31 @@ export default function ReportsPage() {
         </Card>
 
         <Card className="p-3 sm:p-4" data-testid="section-top-expenses">
-          <h2 className="text-sm font-semibold mb-3 sm:mb-4">Top 5 Biggest Spenders</h2>
+          <h2 className="text-sm font-semibold mb-3 sm:mb-4">Top 5 Biggest Spenders ({format(selectedPeriodStart, "MMM yyyy")})</h2>
           {topExpenseSpenders.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No expenses yet</p>
+            <p className="text-sm text-muted-foreground text-center py-8">No expenses in this period</p>
           ) : (
             <div className="space-y-2">
-              {topExpenseSpenders.map((spender, i) => {
-                return (
-                  <div key={`${spender.name}-${i}`} className="flex items-center justify-between gap-2 py-1.5 border-b last:border-0 flex-wrap" data-testid={`top-expense-${i}`}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-xs font-semibold text-muted-foreground w-5 shrink-0">{i + 1}.</span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{spender.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {spender.primaryCategory} &middot; {spender.count} transaction{spender.count === 1 ? "" : "s"} &middot; last {format(parseISO(spender.latestDate), "MMM d, yyyy")}
-                        </p>
-                      </div>
+              {topExpenseSpenders.map((spender, index) => (
+                <div
+                  key={`${spender.name}-${index}`}
+                  className="flex items-center justify-between gap-2 py-1.5 border-b last:border-0 flex-wrap"
+                  data-testid={`top-expense-${index}`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs font-semibold text-muted-foreground w-5 shrink-0">{index + 1}.</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{spender.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {spender.primaryCategory} &middot; {spender.count} transaction{spender.count === 1 ? "" : "s"} &middot; last {format(parseISO(spender.latestDate), "MMM d, yyyy")}
+                      </p>
                     </div>
-                    <span className="text-sm font-semibold text-red-600 dark:text-red-400 shrink-0">
-                      {formatCurrency(spender.total, currency)}
-                    </span>
                   </div>
-                );
-              })}
+                  <span className="text-sm font-semibold text-red-600 dark:text-red-400 shrink-0">
+                    {formatCurrency(spender.total, currency)}
+                  </span>
+                </div>
+              ))}
             </div>
           )}
         </Card>
@@ -551,7 +684,7 @@ export default function ReportsPage() {
             <LineChart data={monthlyTrend}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatCurrency(v, currency)} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => formatCurrency(value, currency)} />
               <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
               <Legend />
               <Line type="monotone" dataKey="Income" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />

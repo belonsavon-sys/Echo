@@ -22,6 +22,8 @@ async function fetchUser(): Promise<User | null> {
 
 export function useAuth() {
   const queryClient = useQueryClient();
+  const authCallbackUrl =
+    typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined;
 
   useEffect(() => {
     const { data: listener } = supabase.auth.onAuthStateChange(() => {
@@ -55,7 +57,7 @@ export function useAuth() {
       const { error } = await supabase.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: window.location.origin },
+        options: { emailRedirectTo: authCallbackUrl },
       });
       if (error) throw error;
     },
@@ -68,7 +70,7 @@ export function useAuth() {
     mutationFn: async ({ email }: { email: string }) => {
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: window.location.origin },
+        options: { emailRedirectTo: authCallbackUrl },
       });
       if (error) throw error;
     },

@@ -78,12 +78,12 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col lg:flex-row">
+    <div className="h-dvh overflow-auto bg-background text-foreground flex flex-col lg:flex-row">
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 lg:py-0 animate-in fade-in duration-700">
         <div className="max-w-md w-full space-y-8">
           <div className="flex items-center gap-2.5">
             <Wallet className="w-7 h-7 text-primary" />
-            <span className="text-xl font-bold tracking-tight">Fudget</span>
+            <span className="text-xl font-bold tracking-tight">Echo</span>
           </div>
 
           <div className="space-y-3">

@@ -20,8 +20,7 @@ begin
       'favorites',
       'savings_goals',
       'net_worth_accounts',
-      'user_preferences',
-      'dashboard_watchlists'
+      'user_preferences'
     );
 
   if truncate_targets is not null then

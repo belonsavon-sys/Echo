@@ -123,17 +123,6 @@ begin
          );
     end if;
 
-    if exists (
-      select 1 from information_schema.tables
-      where table_schema = 'public' and table_name = 'dashboard_watchlists'
-    ) then
-      delete from public.dashboard_watchlists
-      where coalesce(user_id, '') = 'local-dev-user'
-         or budget_id in (
-           select id from public.budgets where user_id = 'local-dev-user'
-         );
-    end if;
-
     delete from public.budgets
     where user_id = 'local-dev-user';
   end if;

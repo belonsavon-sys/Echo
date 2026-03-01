@@ -68,6 +68,11 @@ function SidebarProvider({
 }) {
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
+  const edgeSwipeRef = React.useRef({
+    tracking: false,
+    startX: 0,
+    startY: 0,
+  })
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -108,6 +113,48 @@ function SidebarProvider({
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [toggleSidebar])
+
+  React.useEffect(() => {
+    if (!isMobile) return
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (openMobile || event.touches.length !== 1) return
+      const touch = event.touches[0]
+      if (touch.clientX > 24) return
+      edgeSwipeRef.current = {
+        tracking: true,
+        startX: touch.clientX,
+        startY: touch.clientY,
+      }
+    }
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const state = edgeSwipeRef.current
+      if (!state.tracking || event.touches.length !== 1) return
+      const touch = event.touches[0]
+      const deltaX = touch.clientX - state.startX
+      const deltaY = touch.clientY - state.startY
+      if (deltaX < 40 || Math.abs(deltaX) <= Math.abs(deltaY) + 8) return
+      edgeSwipeRef.current.tracking = false
+      setOpenMobile(true)
+    }
+
+    const stopTracking = () => {
+      edgeSwipeRef.current.tracking = false
+    }
+
+    window.addEventListener("touchstart", handleTouchStart, { passive: true })
+    window.addEventListener("touchmove", handleTouchMove, { passive: true })
+    window.addEventListener("touchend", stopTracking, { passive: true })
+    window.addEventListener("touchcancel", stopTracking, { passive: true })
+
+    return () => {
+      window.removeEventListener("touchstart", handleTouchStart)
+      window.removeEventListener("touchmove", handleTouchMove)
+      window.removeEventListener("touchend", stopTracking)
+      window.removeEventListener("touchcancel", stopTracking)
+    }
+  }, [isMobile, openMobile, setOpenMobile])
 
   // We add a state so that we can do data-state="expanded" or "collapsed".
   // This makes it easier to style the sidebar with Tailwind classes.
@@ -164,6 +211,18 @@ function Sidebar({
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const [mobileDragOffset, setMobileDragOffset] = React.useState(0)
+  const closeDragRef = React.useRef({
+    tracking: false,
+    startX: 0,
+    startY: 0,
+  })
+
+  React.useEffect(() => {
+    if (!openMobile && mobileDragOffset !== 0) {
+      setMobileDragOffset(0)
+    }
+  }, [openMobile, mobileDragOffset])
 
   if (collapsible === "none") {
     return (
@@ -181,6 +240,50 @@ function Sidebar({
   }
 
   if (isMobile) {
+    const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+      if (!openMobile || event.touches.length !== 1) return
+      const touch = event.touches[0]
+      closeDragRef.current = {
+        tracking: true,
+        startX: touch.clientX,
+        startY: touch.clientY,
+      }
+    }
+
+    const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
+      const state = closeDragRef.current
+      if (!state.tracking || event.touches.length !== 1) return
+
+      const touch = event.touches[0]
+      const deltaX = touch.clientX - state.startX
+      const deltaY = touch.clientY - state.startY
+      if (Math.abs(deltaX) <= Math.abs(deltaY) + 8) return
+
+      if (side === "left") {
+        if (deltaX > 0) {
+          setMobileDragOffset(0)
+          return
+        }
+        setMobileDragOffset(Math.max(deltaX, -260))
+      } else {
+        if (deltaX < 0) {
+          setMobileDragOffset(0)
+          return
+        }
+        setMobileDragOffset(Math.min(deltaX, 260))
+      }
+    }
+
+    const handleTouchEnd = () => {
+      const shouldClose =
+        side === "left" ? mobileDragOffset <= -80 : mobileDragOffset >= 80
+      closeDragRef.current.tracking = false
+      setMobileDragOffset(0)
+      if (shouldClose) {
+        setOpenMobile(false)
+      }
+    }
+
     return (
       <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
         <SheetContent
@@ -191,6 +294,9 @@ function Sidebar({
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
+              transform:
+                mobileDragOffset !== 0 ? `translateX(${mobileDragOffset}px)` : undefined,
+              transition: mobileDragOffset !== 0 ? "none" : undefined,
             } as React.CSSProperties
           }
           side={side}
@@ -199,7 +305,18 @@ function Sidebar({
             <SheetTitle>Sidebar</SheetTitle>
             <SheetDescription>Displays the mobile sidebar.</SheetDescription>
           </SheetHeader>
-          <div className="flex h-full w-full flex-col">{children}</div>
+          <div
+            className="flex h-full w-full flex-col"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
+          >
+            <div className="flex justify-center py-2">
+              <span className="h-1.5 w-12 rounded-full bg-sidebar-border/90" />
+            </div>
+            {children}
+          </div>
         </SheetContent>
       </Sheet>
     )

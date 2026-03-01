@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fudget-v1';
+const CACHE_NAME = 'echo-v1';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',

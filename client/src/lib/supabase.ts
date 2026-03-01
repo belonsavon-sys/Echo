@@ -2,7 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-const REMEMBER_ME_KEY = "fudget-remember-me";
+const REMEMBER_ME_KEY = "echo-remember-me";
+const LEGACY_REMEMBER_ME_KEY = "fudget-remember-me";
 
 function getSupabaseSessionKeyPrefix(): string {
   if (!supabaseUrl) return "sb-";
@@ -27,7 +28,11 @@ function hasWindow() {
 
 function isRememberMeEnabled(): boolean {
   if (!hasWindow()) return true;
-  return window.localStorage.getItem(REMEMBER_ME_KEY) !== "false";
+  const preferred = window.localStorage.getItem(REMEMBER_ME_KEY);
+  if (preferred !== null) {
+    return preferred !== "false";
+  }
+  return window.localStorage.getItem(LEGACY_REMEMBER_ME_KEY) !== "false";
 }
 
 function clearSupabaseSessionFromStorage(storage: Storage) {
@@ -70,6 +75,7 @@ export function getRememberMePreference(): boolean {
 export function setRememberMePreference(rememberMe: boolean): void {
   if (!hasWindow()) return;
   window.localStorage.setItem(REMEMBER_ME_KEY, rememberMe ? "true" : "false");
+  window.localStorage.removeItem(LEGACY_REMEMBER_ME_KEY);
   if (rememberMe) {
     clearSupabaseSessionFromStorage(window.sessionStorage);
   } else {

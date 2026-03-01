@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { Budget, Entry } from "@shared/schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line } from "recharts";
-import { parseISO, getMonth, getYear } from "date-fns";
+import { getYear } from "date-fns";
 import { formatCurrency, formatNumber } from "@/lib/currency";
-
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+import { fetchBudgetAggregate, type BudgetAggregateResponse } from "@/lib/budget-aggregate";
+import { computeAnnualSummary } from "@shared/annual-summary";
 
 export default function AnnualOverviewPage() {
   const currentYear = getYear(new Date());
@@ -17,46 +17,35 @@ export default function AnnualOverviewPage() {
     queryKey: ["/api/budgets"],
   });
   const selectableBudgets = budgets.filter((b) => !b.isFolder);
+  const selectableBudgetIds = selectableBudgets.map((budget) => budget.id);
 
-  const entriesQueries = useQueries({
-    queries: selectableBudgets.map((budget) => ({
-      queryKey: ["/api/budgets", budget.id, "entries"],
-      enabled: selectableBudgets.length > 0,
-    })),
-  });
-
-  const entriesLoading = entriesQueries.some((q) => q.isLoading);
-
-  const entriesByBudget = new Map<number, Entry[]>();
-  selectableBudgets.forEach((budget, index) => {
-    entriesByBudget.set(budget.id, (entriesQueries[index]?.data as Entry[]) || []);
+  const { data: aggregate = { entries: [], categories: [], history: [] }, isLoading: entriesLoading } = useQuery<BudgetAggregateResponse>({
+    queryKey: ["/api/budgets/aggregate", "annual", selectableBudgetIds.join(",")],
+    enabled: selectableBudgetIds.length > 0,
+    queryFn: () =>
+      fetchBudgetAggregate(selectableBudgetIds, {
+        entries: true,
+      }),
   });
 
   const selectedBudgetId = scope === "all" ? null : Number(scope);
   const currency = selectedBudgetId
     ? selectableBudgets.find((budget) => budget.id === selectedBudgetId)?.currency || "USD"
     : selectableBudgets[0]?.currency || "USD";
-  const scopedEntries = selectedBudgetId
-    ? entriesByBudget.get(selectedBudgetId) || []
-    : Array.from(entriesByBudget.values()).flat();
+  const scopedEntries: Entry[] = selectedBudgetId
+    ? aggregate.entries.filter((entry) => entry.budgetId === selectedBudgetId)
+    : aggregate.entries;
 
-  const targetYear = parseInt(year, 10);
-  const yearEntries = scopedEntries.filter((entry) => getYear(parseISO(entry.date)) === targetYear);
-
-  const monthlyBreakdown = MONTH_NAMES.map((name, index) => {
-    const monthEntries = yearEntries.filter((entry) => getMonth(parseISO(entry.date)) === index);
-    const income = monthEntries.filter((entry) => entry.type === "income").reduce((sum, entry) => sum + entry.amount, 0);
-    const expenses = monthEntries.filter((entry) => entry.type === "expense").reduce((sum, entry) => sum + entry.amount, 0);
-    return { month: name, Income: income, Expenses: expenses, Savings: income - expenses };
-  });
-
-  const totalIncome = yearEntries.filter((entry) => entry.type === "income").reduce((sum, entry) => sum + entry.amount, 0);
-  const totalExpenses = yearEntries.filter((entry) => entry.type === "expense").reduce((sum, entry) => sum + entry.amount, 0);
-  const totalSavings = totalIncome - totalExpenses;
-  const savingsRate = totalIncome > 0 ? (totalSavings / totalIncome) * 100 : 0;
-
-  const avgMonthlyIncome = totalIncome / 12;
-  const avgMonthlyExpenses = totalExpenses / 12;
+  const annualSummary = computeAnnualSummary(scopedEntries, parseInt(year, 10));
+  const {
+    monthlyBreakdown,
+    totalIncome,
+    totalExpenses,
+    totalSavings,
+    savingsRate,
+    avgMonthlyIncome,
+    avgMonthlyExpenses,
+  } = annualSummary;
 
   if (budgetsLoading || entriesLoading) {
     return (

@@ -1,36 +1,22 @@
-import { useMemo, useState } from "react";
-import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
-import type {
-  Budget,
-  Category,
-  DashboardWatchlist,
-  Entry,
-  EntryHistory,
-  SavingsGoal,
-} from "@shared/schema";
+import { useQuery } from "@tanstack/react-query";
+import type { CSSProperties } from "react";
+import type { Budget, Entry, EntryHistory, SavingsGoal } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Clock,
   DollarSign,
-  Plus,
   Star,
   Target,
-  Trash2,
   TrendingDown,
   TrendingUp,
   Wallet,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
-import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatCurrency } from "@/lib/currency";
+import { fetchBudgetAggregate, type BudgetAggregateResponse } from "@/lib/budget-aggregate";
 
 type DashboardCardId =
   | "income"
@@ -39,17 +25,7 @@ type DashboardCardId =
   | "activeBudgets"
   | "starred"
   | "goals"
-  | "activity"
-  | "watchlists";
-
-type WatchlistSummary = DashboardWatchlist & {
-  monthKey: string;
-  actualAmount: number;
-  remainingAmount: number;
-  progressPercent: number | null;
-  budgetName: string | null;
-  categoryName: string | null;
-};
+  | "activity";
 
 const DEFAULT_CARD_ORDER: DashboardCardId[] = [
   "income",
@@ -59,7 +35,6 @@ const DEFAULT_CARD_ORDER: DashboardCardId[] = [
   "starred",
   "goals",
   "activity",
-  "watchlists",
 ];
 
 const CARD_TITLES: Record<DashboardCardId, string> = {
@@ -70,124 +45,38 @@ const CARD_TITLES: Record<DashboardCardId, string> = {
   starred: "Starred Unpaid Expenses",
   goals: "Savings Goals",
   activity: "Recent Activity",
-  watchlists: "Watchlists",
 };
 
 export default function DashboardPage() {
-  const [monthKey, setMonthKey] = useState(format(new Date(), "yyyy-MM"));
-  const [newWatchlistName, setNewWatchlistName] = useState("");
-  const [newWatchlistTargetAmount, setNewWatchlistTargetAmount] = useState("");
-  const [newWatchlistBudgetId, setNewWatchlistBudgetId] = useState("all");
-  const [newWatchlistCategoryId, setNewWatchlistCategoryId] = useState("all");
-  const [newWatchlistScope, setNewWatchlistScope] = useState<"current" | "fixed">("current");
-  const [newWatchlistFixedMonth, setNewWatchlistFixedMonth] = useState(format(new Date(), "yyyy-MM"));
-
   const { data: budgets = [], isLoading: budgetsLoading } = useQuery<Budget[]>({
     queryKey: ["/api/budgets"],
   });
   const selectableBudgets = budgets.filter((b) => !b.isFolder);
-
-  const { data: watchlists = [], isLoading: watchlistsLoading } = useQuery<WatchlistSummary[]>({
-    queryKey: ["/api/dashboard/watchlists", monthKey],
-    queryFn: async () => {
-      const response = await apiRequest("GET", `/api/dashboard/watchlists?monthKey=${monthKey}`);
-      return response.json();
-    },
-  });
+  const selectableBudgetIds = selectableBudgets.map((budget) => budget.id);
 
   const { data: goals = [], isLoading: goalsLoading } = useQuery<SavingsGoal[]>({
     queryKey: ["/api/savings-goals"],
   });
 
-  const entriesQueries = useQueries({
-    queries: selectableBudgets.map((budget) => ({
-      queryKey: ["/api/budgets", budget.id, "entries"],
-      enabled: selectableBudgets.length > 0,
-    })),
+  const { data: aggregate = { entries: [], categories: [], history: [] }, isLoading: aggregateLoading } = useQuery<BudgetAggregateResponse>({
+    queryKey: ["/api/budgets/aggregate", "dashboard", selectableBudgetIds.join(",")],
+    enabled: selectableBudgetIds.length > 0,
+    queryFn: () =>
+      fetchBudgetAggregate(selectableBudgetIds, {
+        entries: true,
+        history: true,
+      }),
   });
 
-  const historyQueries = useQueries({
-    queries: selectableBudgets.map((budget) => ({
-      queryKey: ["/api/budgets", budget.id, "history"],
-      enabled: selectableBudgets.length > 0,
-    })),
-  });
+  const isLoading = budgetsLoading || aggregateLoading;
+  const historyLoading = aggregateLoading;
 
-  const categoriesQueries = useQueries({
-    queries: selectableBudgets.map((budget) => ({
-      queryKey: ["/api/budgets", budget.id, "categories"],
-      enabled: selectableBudgets.length > 0,
-    })),
-  });
-
-  const createWatchlist = useMutation({
-    mutationFn: async (payload: {
-      name: string;
-      targetAmount: number;
-      budgetId: number | null;
-      categoryId: number | null;
-      monthKeyScope: "current" | "fixed";
-      fixedMonthKey: string | null;
-    }) => {
-      const response = await apiRequest("POST", "/api/dashboard/watchlists", payload);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/watchlists"] });
-      setNewWatchlistName("");
-      setNewWatchlistTargetAmount("");
-      setNewWatchlistBudgetId("all");
-      setNewWatchlistCategoryId("all");
-      setNewWatchlistScope("current");
-      setNewWatchlistFixedMonth(format(new Date(), "yyyy-MM"));
-    },
-  });
-
-  const updateWatchlist = useMutation({
-    mutationFn: async (payload: { id: number; isActive: boolean }) => {
-      const response = await apiRequest("PATCH", `/api/dashboard/watchlists/${payload.id}`, {
-        isActive: payload.isActive,
-      });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/watchlists"] });
-    },
-  });
-
-  const deleteWatchlist = useMutation({
-    mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/dashboard/watchlists/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/watchlists"] });
-    },
-  });
-
-  const categoriesByBudget = useMemo(() => {
-    const map = new Map<number, Category[]>();
-    selectableBudgets.forEach((budget, index) => {
-      map.set(budget.id, (categoriesQueries[index]?.data as Category[]) || []);
-    });
-    return map;
-  }, [categoriesQueries, selectableBudgets]);
-
-  const categoriesForSelectedBudget = newWatchlistBudgetId !== "all"
-    ? categoriesByBudget.get(Number(newWatchlistBudgetId)) || []
-    : [];
-
-  const entriesLoading = entriesQueries.some((query) => query.isLoading);
-  const historyLoading = historyQueries.some((query) => query.isLoading);
-  const isLoading = budgetsLoading || entriesLoading;
-
-  const allEntries: Entry[] = entriesQueries.flatMap((query) => (query.data as Entry[]) || []);
-  const allHistory: (EntryHistory & { budgetName: string })[] = historyQueries
-    .flatMap((query, index) =>
-      ((query.data as EntryHistory[]) || []).map((history) => ({
-        ...history,
-        budgetName: selectableBudgets[index]?.name || "Budget",
-      })),
-    )
+  const allEntries: Entry[] = aggregate.entries;
+  const allHistory: (EntryHistory & { budgetName: string })[] = aggregate.history
+    .map((history) => ({
+      ...history,
+      budgetName: selectableBudgets.find((budget) => budget.id === history.budgetId)?.name || "Budget",
+    }))
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     .slice(0, 10);
 
@@ -214,11 +103,6 @@ export default function DashboardPage() {
     .filter((entry) => entry.isStarred && !entry.isPaidOrReceived && entry.type === "expense")
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 10);
-  const parsedNewWatchlistTargetAmount = Number(newWatchlistTargetAmount);
-  const canCreateWatchlist =
-    !!newWatchlistName.trim() &&
-    Number.isFinite(parsedNewWatchlistTargetAmount) &&
-    parsedNewWatchlistTargetAmount >= 0;
 
   function getEntryNameFromHistory(history: EntryHistory): string {
     try {
@@ -227,21 +111,6 @@ export default function DashboardPage() {
     } catch {
       return "Entry";
     }
-  }
-
-  function handleCreateWatchlist() {
-    const name = newWatchlistName.trim();
-    const targetAmount = Number(newWatchlistTargetAmount);
-    if (!name || !Number.isFinite(targetAmount) || targetAmount < 0) return;
-
-    createWatchlist.mutate({
-      name,
-      targetAmount,
-      budgetId: newWatchlistBudgetId === "all" ? null : Number(newWatchlistBudgetId),
-      categoryId: newWatchlistCategoryId === "all" ? null : Number(newWatchlistCategoryId),
-      monthKeyScope: newWatchlistScope,
-      fixedMonthKey: newWatchlistScope === "fixed" ? newWatchlistFixedMonth : null,
-    });
   }
 
   function renderCard(cardId: DashboardCardId) {
@@ -388,7 +257,7 @@ export default function DashboardPage() {
                       <Progress
                         value={progressPercent}
                         className="h-2"
-                        style={{ "--progress-foreground": goal.color } as any}
+                        style={{ "--progress-foreground": goal.color } as CSSProperties}
                       />
                     </div>
                   );
@@ -441,186 +310,7 @@ export default function DashboardPage() {
       );
     }
 
-    return (
-      <Card data-testid="card-watchlists">
-        <CardHeader className="pb-3 flex flex-row items-center justify-between">
-          <CardTitle className="text-sm font-medium">{CARD_TITLES.watchlists}</CardTitle>
-          <div className="flex items-center gap-2">
-            <Input
-              type="month"
-              value={monthKey}
-              onChange={(event) => setMonthKey(event.target.value || format(new Date(), "yyyy-MM"))}
-              className="h-8 w-[130px]"
-              data-testid="input-watchlist-month"
-            />
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline" data-testid="button-open-watchlist-create">
-                  <Plus className="w-3.5 h-3.5 mr-1" />
-                  Add
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add Watchlist</DialogTitle>
-                  <DialogDescription>Track a spending target by budget/category each month.</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-3 pt-2">
-                  <div className="space-y-1">
-                    <Label>Name</Label>
-                    <Input
-                      value={newWatchlistName}
-                      onChange={(event) => setNewWatchlistName(event.target.value)}
-                      placeholder="Dining Out"
-                      data-testid="input-watchlist-name"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Target Amount</Label>
-                    <Input
-                      type="number"
-                      value={newWatchlistTargetAmount}
-                      onChange={(event) => setNewWatchlistTargetAmount(event.target.value)}
-                      placeholder="400"
-                      data-testid="input-watchlist-target"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Budget</Label>
-                    <Select
-                      value={newWatchlistBudgetId}
-                      onValueChange={(value) => {
-                        setNewWatchlistBudgetId(value);
-                        setNewWatchlistCategoryId("all");
-                      }}
-                    >
-                      <SelectTrigger data-testid="select-watchlist-budget">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All budgets</SelectItem>
-                        {selectableBudgets.map((budget) => (
-                          <SelectItem key={budget.id} value={String(budget.id)}>
-                            {budget.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Category</Label>
-                    <Select
-                      value={newWatchlistCategoryId}
-                      onValueChange={setNewWatchlistCategoryId}
-                      disabled={newWatchlistBudgetId === "all"}
-                    >
-                      <SelectTrigger data-testid="select-watchlist-category">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All categories</SelectItem>
-                        {categoriesForSelectedBudget.map((category) => (
-                          <SelectItem key={category.id} value={String(category.id)}>
-                            {category.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Scope</Label>
-                    <Select value={newWatchlistScope} onValueChange={(value) => setNewWatchlistScope(value as "current" | "fixed")}>
-                      <SelectTrigger data-testid="select-watchlist-scope">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="current">Use dashboard month</SelectItem>
-                        <SelectItem value="fixed">Fixed month</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {newWatchlistScope === "fixed" && (
-                    <div className="space-y-1">
-                      <Label>Fixed Month</Label>
-                      <Input
-                        type="month"
-                        value={newWatchlistFixedMonth}
-                        onChange={(event) => setNewWatchlistFixedMonth(event.target.value || format(new Date(), "yyyy-MM"))}
-                        data-testid="input-watchlist-fixed-month"
-                      />
-                    </div>
-                  )}
-                  <Button
-                    onClick={handleCreateWatchlist}
-                    className="w-full"
-                    disabled={!canCreateWatchlist || createWatchlist.isPending}
-                    data-testid="button-create-watchlist"
-                  >
-                    {createWatchlist.isPending ? "Creating..." : "Create Watchlist"}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {watchlistsLoading ? (
-            <div className="space-y-3">
-              {[1, 2].map((index) => (
-                <Skeleton key={index} className="h-14 rounded-md" />
-              ))}
-            </div>
-          ) : watchlists.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">No watchlists yet</p>
-          ) : (
-            <div className="space-y-3">
-              {watchlists.map((watchlist) => (
-                <div key={watchlist.id} className="rounded-md border p-3" data-testid={`watchlist-${watchlist.id}`}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{watchlist.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {watchlist.budgetName || "All budgets"}{watchlist.categoryName ? ` · ${watchlist.categoryName}` : ""}
-                        {` · ${watchlist.monthKey}`}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => updateWatchlist.mutate({ id: watchlist.id, isActive: !watchlist.isActive })}
-                        disabled={updateWatchlist.isPending}
-                        data-testid={`button-toggle-watchlist-${watchlist.id}`}
-                      >
-                        {watchlist.isActive ? "Active" : "Hidden"}
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => deleteWatchlist.mutate(watchlist.id)}
-                        disabled={deleteWatchlist.isPending}
-                        data-testid={`button-delete-watchlist-${watchlist.id}`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-muted-foreground" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Spent</span>
-                      <span className="tabular-nums">
-                        {formatCurrency(watchlist.actualAmount, primaryCurrency)} / {formatCurrency(watchlist.targetAmount, primaryCurrency)}
-                      </span>
-                    </div>
-                    <Progress value={Math.min(100, watchlist.progressPercent ?? 0)} className="h-2 mt-1" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    );
+    return null;
   }
 
   if (isLoading) {

@@ -2,7 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import { setupAuth, registerAuthRoutes } from "./auth";
+import { registerDevExplorerRoutes } from "./dev-routes";
 
 function loadLocalEnvFile() {
   const loadEnvFile = (process as any).loadEnvFile as ((path?: string) => void) | undefined;
@@ -46,10 +47,24 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+function summarizeJsonResponseForLog(payload: unknown): string {
+  if (payload === null) return "null";
+  if (Array.isArray(payload)) {
+    return `array(len=${payload.length})`;
+  }
+  if (typeof payload === "object") {
+    const keys = Object.keys(payload as Record<string, unknown>);
+    const shownKeys = keys.slice(0, 6);
+    const suffix = keys.length > shownKeys.length ? ",..." : "";
+    return `object(keys=[${shownKeys.join(",")}${suffix}])`;
+  }
+  return `type=${typeof payload}`;
+}
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  let capturedJsonResponse: unknown = undefined;
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -61,8 +76,8 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      if (capturedJsonResponse !== undefined) {
+        logLine += ` :: ${summarizeJsonResponseForLog(capturedJsonResponse)}`;
       }
 
       log(logLine);
@@ -77,6 +92,9 @@ app.use((req, res, next) => {
   registerAuthRoutes(app);
 
   await registerRoutes(httpServer, app);
+  if (process.env.NODE_ENV !== "production") {
+    registerDevExplorerRoutes(app);
+  }
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

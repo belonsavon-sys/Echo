@@ -30,8 +30,7 @@ begin
     'favorites',
     'savings_goals',
     'net_worth_accounts',
-    'user_preferences',
-    'dashboard_watchlists'
+    'user_preferences'
   ] loop
     rel := to_regclass(format('public.%I', t));
     if rel is null then

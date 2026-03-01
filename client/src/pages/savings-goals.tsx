@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { SavingsGoal, Budget } from "@shared/schema";
+import type { SavingsGoal, Budget, InsertSavingsGoal } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -13,6 +13,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { Plus, Target, Trash2, CalendarIcon, TrendingUp } from "lucide-react";
 import { format, differenceInDays, parseISO } from "date-fns";
 import { formatCurrency, formatNumber } from "@/lib/currency";
+
+type SavingsGoalPayload = Omit<InsertSavingsGoal, "userId">;
 
 export default function SavingsGoalsPage() {
   const { toast } = useToast();
@@ -30,7 +32,7 @@ export default function SavingsGoalsPage() {
   const selectableBudgets = budgets.filter((b) => !b.isFolder);
 
   const createGoal = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: SavingsGoalPayload) => {
       const res = await apiRequest("POST", "/api/savings-goals", data);
       return res.json();
     },
@@ -46,7 +48,7 @@ export default function SavingsGoalsPage() {
   });
 
   const updateGoal = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+    mutationFn: async ({ id, data }: { id: number; data: Partial<SavingsGoalPayload> }) => {
       const res = await apiRequest("PATCH", `/api/savings-goals/${id}`, data);
       return res.json();
     },

@@ -24,11 +24,15 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
+const DARK_MODE_KEY = "echo-dark-mode";
+const THEME_KEY = "echo-theme";
+const LEGACY_DARK_MODE_KEY = "fudget-dark-mode";
+const LEGACY_THEME_KEY = "fudget-theme";
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [darkMode, setDarkMode] = useState(() => {
     try {
-      const stored = localStorage.getItem("fudget-dark-mode");
+      const stored = localStorage.getItem(DARK_MODE_KEY) ?? localStorage.getItem(LEGACY_DARK_MODE_KEY);
       return stored === "true";
     } catch {
       return false;
@@ -37,7 +41,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const [theme, setTheme] = useState<string>(() => {
     try {
-      return localStorage.getItem("fudget-theme") || "default";
+      return localStorage.getItem(THEME_KEY) || localStorage.getItem(LEGACY_THEME_KEY) || "default";
     } catch {
       return "default";
     }
@@ -50,7 +54,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } else {
       root.classList.remove("dark");
     }
-    localStorage.setItem("fudget-dark-mode", String(darkMode));
+    localStorage.setItem(DARK_MODE_KEY, String(darkMode));
+    localStorage.removeItem(LEGACY_DARK_MODE_KEY);
   }, [darkMode]);
 
   useEffect(() => {
@@ -63,7 +68,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (theme !== "default") {
       root.classList.add(`theme-${theme}`);
     }
-    localStorage.setItem("fudget-theme", theme);
+    localStorage.setItem(THEME_KEY, theme);
+    localStorage.removeItem(LEGACY_THEME_KEY);
   }, [theme]);
 
   return (

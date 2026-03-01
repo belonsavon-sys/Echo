@@ -1,6 +1,6 @@
 {
-  "name": "Fudget Budget",
-  "short_name": "Fudget",
+  "name": "Echo Budget",
+  "short_name": "Echo",
   "description": "Minimalist budget tracking app",
   "start_url": "/",
   "display": "standalone",
