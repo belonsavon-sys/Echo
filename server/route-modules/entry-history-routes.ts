@@ -11,6 +11,7 @@ import {
   routeEntryForCreate,
   verifyBudgetOwnership,
 } from "../lib/budget-service";
+import { syncAutoDateEntryOrderForBudgets } from "../lib/auto-entry-order";
 import { validateFullEntryOrder } from "../lib/entry-reorder";
 
 type EntryHistoryRouteDeps = {
@@ -78,6 +79,7 @@ export function registerEntryHistoryRoutes(app: Express, deps: EntryHistoryRoute
 
     const routedData = await routeEntryForCreate(storage, validatedEntry, userId);
     const entry = await storage.createEntry(routedData);
+    const affectedBudgetIds = new Set<number>([entry.budgetId]);
 
     await storage.createHistory({
       entryId: entry.id,
@@ -122,9 +124,12 @@ export function registerEntryHistoryRoutes(app: Express, deps: EntryHistoryRoute
           },
           userId,
         );
-        await storage.createEntry(recurringOccurrence);
+        const createdOccurrence = await storage.createEntry(recurringOccurrence);
+        affectedBudgetIds.add(createdOccurrence.budgetId);
       }
     }
+
+    await syncAutoDateEntryOrderForBudgets(storage, Array.from(affectedBudgetIds), userId);
 
     res.status(201).json(entry);
   });
@@ -217,6 +222,12 @@ export function registerEntryHistoryRoutes(app: Express, deps: EntryHistoryRoute
       newData: JSON.stringify(updated),
     });
 
+    const affectedBudgetIds = new Set<number>([existing.budgetId]);
+    if (updated?.budgetId) {
+      affectedBudgetIds.add(updated.budgetId);
+    }
+    await syncAutoDateEntryOrderForBudgets(storage, Array.from(affectedBudgetIds), userId);
+
     res.json(updated);
   });
 
@@ -227,6 +238,8 @@ export function registerEntryHistoryRoutes(app: Express, deps: EntryHistoryRoute
     if (!(await verifyBudgetOwnership(storage, existing.budgetId, userId))) {
       return res.status(403).json({ message: "Forbidden" });
     }
+    const recurringChildren = await storage.getRecurringChildren(existing.id);
+
     await storage.createHistory({
       entryId: existing.id,
       budgetId: existing.budgetId,
@@ -235,6 +248,11 @@ export function registerEntryHistoryRoutes(app: Express, deps: EntryHistoryRoute
       newData: null,
     });
     await storage.deleteEntry(Number(req.params.id));
+    await syncAutoDateEntryOrderForBudgets(
+      storage,
+      [existing.budgetId, ...recurringChildren.map((child) => child.budgetId)],
+      userId,
+    );
     res.status(204).send();
   });
 
@@ -303,6 +321,7 @@ export function registerEntryHistoryRoutes(app: Express, deps: EntryHistoryRoute
       const prevData = JSON.parse(targetRecord.previousData);
       const { id, ...rest } = prevData;
       const restored = await storage.createEntry(rest);
+      await syncAutoDateEntryOrderForBudgets(storage, [restored.budgetId], userId);
       await storage.createHistory({
         entryId: restored.id,
         budgetId: restored.budgetId,
@@ -315,8 +334,14 @@ export function registerEntryHistoryRoutes(app: Express, deps: EntryHistoryRoute
 
     if (targetRecord.action === "updated" && targetRecord.previousData) {
       const prevData = JSON.parse(targetRecord.previousData);
+      const nextData = targetRecord.newData ? JSON.parse(targetRecord.newData) : null;
       const { id, ...rest } = prevData;
       const restored = await storage.updateEntry(targetRecord.entryId, rest);
+      await syncAutoDateEntryOrderForBudgets(
+        storage,
+        [prevData.budgetId, nextData?.budgetId].filter((budgetId): budgetId is number => Number.isInteger(budgetId) && budgetId > 0),
+        userId,
+      );
       if (restored) {
         await storage.createHistory({
           entryId: restored.id,

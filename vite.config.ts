@@ -27,6 +27,17 @@ const commitSha =
 const buildTimeIso = new Date().toISOString();
 const authMode = process.env.LOCAL_DEV_AUTH === "true" ? "LOCAL_DEV_AUTH" : "SUPABASE_JWT";
 
+function getManualChunk(id: string): string | undefined {
+  if (!id.includes("node_modules")) return undefined;
+  if (id.includes("recharts")) return "charts-vendor";
+  if (id.includes("@radix-ui")) return "radix-vendor";
+  if (id.includes("@supabase") || id.includes("/jose/")) return "auth-vendor";
+  if (id.includes("@tanstack/react-query")) return "query-vendor";
+  if (id.includes("@dnd-kit")) return "dnd-vendor";
+  if (id.includes("react-day-picker") || id.includes("date-fns")) return "date-vendor";
+  return "vendor";
+}
+
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
@@ -49,6 +60,11 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: getManualChunk,
+      },
+    },
   },
   server: {
     fs: {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { lazy, Suspense, useState, useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -8,31 +8,43 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import DashboardPage from "@/pages/dashboard";
-import BudgetPage from "@/pages/budget";
-import ReportsPage from "@/pages/reports";
-import AnnualOverviewPage from "@/pages/annual-overview";
-import SavingsGoalsPage from "@/pages/savings-goals";
-import WhatIfPage from "@/pages/what-if";
-import HistoryPage from "@/pages/history";
-import ManageTagsPage from "@/pages/manage-tags";
-import FavoritesPage from "@/pages/favorites";
-import NetWorthPage from "@/pages/net-worth";
-import ComparePage from "@/pages/compare";
-import CategoriesSection from "@/pages/categories";
-import { Wallet, Layers, Loader2 } from "lucide-react";
+import { Layers, Loader2 } from "lucide-react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { useAuth } from "@/hooks/use-auth";
 import LandingPage from "@/pages/landing";
 import AuthCallbackPage from "@/pages/auth-callback";
 import { AppErrorBoundary } from "@/components/app-error-boundary";
 import { DevTools } from "@/components/dev/dev-tools";
-import DevRoutesPage from "@/pages/dev-routes";
+
+const DashboardPage = lazy(() => import("@/pages/dashboard"));
+const BudgetPage = lazy(() => import("@/pages/budget"));
+const ReportsPage = lazy(() => import("@/pages/reports"));
+const AnnualOverviewPage = lazy(() => import("@/pages/annual-overview"));
+const SavingsGoalsPage = lazy(() => import("@/pages/savings-goals"));
+const WhatIfPage = lazy(() => import("@/pages/what-if"));
+const HistoryPage = lazy(() => import("@/pages/history"));
+const ManageTagsPage = lazy(() => import("@/pages/manage-tags"));
+const FavoritesPage = lazy(() => import("@/pages/favorites"));
+const NetWorthPage = lazy(() => import("@/pages/net-worth"));
+const ComparePage = lazy(() => import("@/pages/compare"));
+const CategoriesSection = lazy(() => import("@/pages/categories"));
+const DevRoutesPage = lazy(() => import("@/pages/dev-routes"));
 
 function useDocumentTitle(title: string) {
   useEffect(() => {
     document.title = title;
   }, [title]);
+}
+
+function RouteLoadingState() {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+        Loading view
+      </div>
+    </div>
+  );
 }
 
 function DashboardView() {
@@ -47,24 +59,27 @@ function BudgetView({ budgetId }: { budgetId: number }) {
   return (
     <div className="flex h-full min-h-0">
       <div className="flex-1 min-h-0 min-w-0">
-        <BudgetPage budgetId={budgetId} categoriesButton={
-          <Sheet open={categoriesOpen} onOpenChange={setCategoriesOpen}>
-            <SheetTrigger asChild>
-              <Button size="sm" variant="outline" className="md:hidden" data-testid="button-open-categories-sheet">
-                <Layers className="w-3.5 h-3.5 mr-1" />
-                Categories
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="bottom" className="h-[70vh] overflow-auto">
-              <SheetHeader>
-                <SheetTitle>Categories</SheetTitle>
-              </SheetHeader>
-              <div className="pt-4">
-                <CategoriesSection budgetId={budgetId} />
-              </div>
-            </SheetContent>
-          </Sheet>
-        } />
+        <BudgetPage
+          budgetId={budgetId}
+          categoriesButton={
+            <Sheet open={categoriesOpen} onOpenChange={setCategoriesOpen}>
+              <SheetTrigger asChild>
+                <Button size="sm" variant="outline" className="md:hidden" data-testid="button-open-categories-sheet">
+                  <Layers className="w-3.5 h-3.5 mr-1" />
+                  Categories
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="bottom" className="h-[70vh] overflow-auto">
+                <SheetHeader>
+                  <SheetTitle>Categories</SheetTitle>
+                </SheetHeader>
+                <div className="pt-4">
+                  <CategoriesSection budgetId={budgetId} />
+                </div>
+              </SheetContent>
+            </Sheet>
+          }
+        />
       </div>
       <div className="hidden w-64 overflow-auto border-l p-3 md:block">
         <CategoriesSection budgetId={budgetId} />
@@ -201,23 +216,25 @@ function AppContent() {
             <span className="text-sm font-medium text-muted-foreground" data-testid="text-page-title">{pageTitle}</span>
           </header>
           <main className="min-h-0 flex-1 overflow-hidden">
-            <Switch location={locationPath}>
-              <Route path="/" component={DashboardView} />
-              <Route path="/budget/:id">
-                {(params) => <BudgetRouteHandler id={params.id} activeBudgetId={activeBudgetId} setActiveBudgetId={setActiveBudgetId} />}
-              </Route>
-              <Route path="/reports" component={ReportsView} />
-              <Route path="/annual" component={AnnualView} />
-              <Route path="/goals" component={GoalsView} />
-              <Route path="/networth" component={NetWorthView} />
-              <Route path="/whatif" component={WhatIfView} />
-              <Route path="/history" component={HistoryView} />
-              <Route path="/tags" component={TagsView} />
-              <Route path="/favorites" component={FavoritesView} />
-              <Route path="/compare" component={CompareView} />
-              {import.meta.env.DEV ? <Route path="/dev/routes" component={DevRoutesPage} /> : null}
-              <Route component={DashboardView} />
-            </Switch>
+            <Suspense fallback={<RouteLoadingState />}>
+              <Switch location={locationPath}>
+                <Route path="/" component={DashboardView} />
+                <Route path="/budget/:id">
+                  {(params) => <BudgetRouteHandler id={params.id} activeBudgetId={activeBudgetId} setActiveBudgetId={setActiveBudgetId} />}
+                </Route>
+                <Route path="/reports" component={ReportsView} />
+                <Route path="/annual" component={AnnualView} />
+                <Route path="/goals" component={GoalsView} />
+                <Route path="/networth" component={NetWorthView} />
+                <Route path="/whatif" component={WhatIfView} />
+                <Route path="/history" component={HistoryView} />
+                <Route path="/tags" component={TagsView} />
+                <Route path="/favorites" component={FavoritesView} />
+                <Route path="/compare" component={CompareView} />
+                {import.meta.env.DEV ? <Route path="/dev/routes" component={DevRoutesPage} /> : null}
+                <Route component={DashboardView} />
+              </Switch>
+            </Suspense>
           </main>
         </div>
       </div>
